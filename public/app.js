@@ -111,9 +111,11 @@ function renderCard(svc) {
   // status bar cells
   const bar = node.querySelector('.bar');
   const frag = document.createDocumentFragment();
+  let hasData = false;
   for (const b of svc.buckets) {
     const cell = document.createElement('div');
     const { cls, ratio } = classifyCell(b);
+    if (b.total > 0) hasData = true;
     cell.className = 'cell ' + cls;
     cell.dataset.t = b.t;
     cell.dataset.up = b.up;
@@ -122,6 +124,7 @@ function renderCard(svc) {
     frag.appendChild(cell);
   }
   bar.appendChild(frag);
+  if (!hasData) bar.classList.add('no-data');
 
   // meta
   const root = node.querySelector('.root');
@@ -133,7 +136,8 @@ function renderCard(svc) {
     url.textContent = '🔗 ' + svc.publicUrl;
   }
 
-  // delete
+  // edit / delete
+  node.querySelector('.edit').addEventListener('click', () => openEdit(svc));
   node.querySelector('.del').addEventListener('click', () => deleteService(svc.id, svc.name));
 
   return node;
@@ -266,6 +270,65 @@ async function deleteService(id, name) {
     alert('删除失败，请重试');
   }
 }
+
+// ---- edit modal ------------------------------------------------------------
+const editModal = document.getElementById('editModal');
+const editForm = document.getElementById('editForm');
+const editError = document.getElementById('editError');
+let editingId = null;
+
+function openEdit(svc) {
+  editingId = svc.id;
+  editForm.name.value = svc.name;
+  editForm.port.value = svc.port;
+  editForm.rootDir.value = svc.rootDir || '';
+  editForm.publicUrl.value = svc.publicUrl || '';
+  editError.textContent = '';
+  editModal.hidden = false;
+  editForm.name.focus();
+}
+
+function closeEdit() {
+  editModal.hidden = true;
+  editingId = null;
+}
+
+document.getElementById('editClose').addEventListener('click', closeEdit);
+document.getElementById('editCancel').addEventListener('click', closeEdit);
+editModal.addEventListener('click', (e) => {
+  if (e.target === editModal) closeEdit();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !editModal.hidden) closeEdit();
+});
+
+editForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!editingId) return;
+  editError.textContent = '';
+  const body = {
+    name: editForm.name.value,
+    port: editForm.port.value,
+    rootDir: editForm.rootDir.value,
+    publicUrl: editForm.publicUrl.value,
+  };
+  try {
+    const res = await fetch('/api/services/' + editingId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      editError.textContent = json.error || '保存失败';
+      return;
+    }
+    closeEdit();
+    await fetchData();
+  } catch {
+    editError.textContent = '网络错误，请重试';
+  }
+});
 
 // ---- boot ------------------------------------------------------------------
 buildRangeSwitch();

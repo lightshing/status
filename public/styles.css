@@ -12,6 +12,7 @@
   --down-soft: #fee2e2;
   --partial: #f59e0b;
   --unknown: #dfe2e8;
+  --track: #edeff2;
   --primary: #18181b;
   --primary-hover: #2a2a30;
   --radius: 12px;
@@ -225,26 +226,36 @@ body {
 .since.down .label { color: var(--down); }
 .since.na { color: var(--faint); font-style: normal; }
 
-/* ---------- status bar ---------- */
+/* ---------- status bar (seamless, full width) ---------- */
 .bar {
   display: flex;
-  gap: 2px;
-  height: 34px;
+  height: 32px;
   align-items: stretch;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--track);
+  box-shadow: inset 0 0 0 1px rgba(16, 24, 40, 0.04);
 }
 .bar .cell {
   flex: 1 1 0;
   min-width: 0;
-  border-radius: 3px;
-  background: var(--unknown);
-  transition: transform 0.1s;
+  background: var(--track);
   cursor: default;
 }
 .bar .cell.up { background: var(--up); }
 .bar .cell.down { background: var(--down); }
 .bar .cell.partial { background: var(--partial); }
-.bar .cell.empty { background: #eef0f3; }
-.bar .cell:hover { transform: scaleY(1.12); }
+.bar .cell.empty { background: var(--track); }
+/* highlight the exact hovered segment without breaking the seam */
+.bar .cell:hover { box-shadow: inset 0 0 0 999px rgba(17, 24, 39, 0.14); }
+/* whole-bar empty state reads as one clean track */
+.bar.no-data {
+  background: repeating-linear-gradient(
+    -45deg, var(--track), var(--track) 6px, #e9ecf1 6px, #e9ecf1 12px
+  );
+}
+.bar.no-data .cell { background: transparent; }
+.bar.no-data .cell:hover { box-shadow: none; }
 
 .card-meta {
   display: flex;
@@ -288,8 +299,44 @@ body {
 }
 .tooltip .tt-pct { font-weight: 600; }
 
+/* ---------- edit modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.28);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 20px;
+}
+.modal-backdrop[hidden] { display: none; }
+.modal {
+  background: var(--panel);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(16, 24, 40, 0.18);
+  width: 100%;
+  max-width: 440px;
+  overflow: hidden;
+  animation: pop 0.14s ease;
+}
+@keyframes pop { from { transform: scale(0.97); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; border-bottom: 1px solid var(--border);
+}
+.modal-head h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.modal-head .icon-btn { color: var(--muted); font-size: 16px; }
+.modal-head .icon-btn:hover { background: #f1f2f5; color: var(--text); }
+.modal .add-form {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px;
+  padding: 18px; border-top: 0;
+}
+
 @media (max-width: 560px) {
   .add-form { grid-template-columns: 1fr; }
+  .modal .add-form { grid-template-columns: 1fr; }
   .container { padding: 16px; }
   .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 10px; }
 }

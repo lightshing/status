@@ -67,6 +67,7 @@
         <div class="card-actions">
           <span class="uptime-pct" title="所选时间范围内的在线率"></span>
           <a class="icon-link jump" target="_blank" rel="noopener" title="打开公网网址" hidden>↗</a>
+          <button class="icon-btn edit" title="编辑服务">✎</button>
           <button class="icon-btn del" title="删除服务">✕</button>
         </div>
       </div>
@@ -82,6 +83,38 @@
   </template>
 
   <div class="tooltip" id="tooltip" hidden></div>
+
+  <div class="modal-backdrop" id="editModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+      <div class="modal-head">
+        <h2 id="editTitle">编辑服务</h2>
+        <button class="icon-btn" id="editClose" title="关闭">✕</button>
+      </div>
+      <form class="add-form" id="editForm">
+        <div class="field">
+          <label for="e-name">服务名称</label>
+          <input id="e-name" name="name" type="text" required />
+        </div>
+        <div class="field">
+          <label for="e-port">端口号</label>
+          <input id="e-port" name="port" type="number" min="1" max="65535" required />
+        </div>
+        <div class="field">
+          <label for="e-root">服务根目录</label>
+          <input id="e-root" name="rootDir" type="text" placeholder="/opt/app" />
+        </div>
+        <div class="field">
+          <label for="e-url">公网网址</label>
+          <input id="e-url" name="publicUrl" type="text" placeholder="https://example.com" />
+        </div>
+        <div class="form-actions">
+          <span class="form-error" id="editError"></span>
+          <button type="button" class="btn ghost" id="editCancel">取消</button>
+          <button type="submit" class="btn primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>
