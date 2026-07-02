@@ -332,18 +332,35 @@ const modalTitle = document.getElementById('modalTitle');
 const modalSubmit = document.getElementById('modalSubmit');
 const modalError = document.getElementById('formError');
 let editingId = null; // null => register mode, otherwise edit that id
+let defaultName = ''; // fallback name (from the scanned command) when left blank
+let returnToPorts = false; // true when register was launched from 端口速查
 
 function openModal(svc) {
   editingId = svc ? svc.id : null;
+  defaultName = '';
   modalTitle.textContent = svc ? '编辑服务' : '注册服务';
   modalSubmit.textContent = svc ? '保存' : '注册';
   modalError.textContent = '';
   const nameEl = document.getElementById('f-name');
   nameEl.value = svc ? svc.name : '';
+  nameEl.placeholder = '例如 API 网关';
   document.getElementById('f-port').value = svc ? svc.port : '';
   document.getElementById('f-root').value = svc ? svc.rootDir || '' : '';
   document.getElementById('f-url').value = svc ? svc.publicUrl || '' : '';
   modal.hidden = false;
+  nameEl.focus();
+}
+
+// Register a scanned port: prefill the port and drop the detected name in as a
+// gray placeholder — left blank it's used as-is, typing overrides it.
+function openRegisterForPort(p) {
+  openModal(null);
+  returnToPorts = true;
+  defaultName = p.suggestedName || p.process || '';
+  const nameEl = document.getElementById('f-name');
+  nameEl.value = '';
+  if (defaultName) nameEl.placeholder = defaultName + '（读取自命令，可覆盖）';
+  document.getElementById('f-port').value = p.port;
   nameEl.focus();
 }
 
@@ -354,6 +371,7 @@ function openEdit(svc) {
 function closeModal() {
   modal.hidden = true;
   editingId = null;
+  returnToPorts = false;
 }
 
 document.getElementById('addBtn').addEventListener('click', () => openModal(null));
@@ -363,15 +381,19 @@ modal.addEventListener('click', (e) => {
   if (e.target === modal) closeModal();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !modal.hidden) closeModal();
+  if (e.key !== 'Escape') return;
+  // The register form stacks above 端口速查 — close it first, then the ports modal.
+  if (!modal.hidden) closeModal();
+  else if (!portsModal.hidden) closePorts();
 });
 
 modalForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   modalError.textContent = '';
   const fd = new FormData(modalForm);
+  const typedName = String(fd.get('name') || '').trim();
   const body = {
-    name: fd.get('name'),
+    name: typedName || defaultName, // blank falls back to the scanned name
     port: fd.get('port'),
     rootDir: fd.get('rootDir'),
     publicUrl: fd.get('publicUrl'),
@@ -389,12 +411,148 @@ modalForm.addEventListener('submit', async (e) => {
       modalError.textContent = json.error || (editingId ? '保存失败' : '注册失败');
       return;
     }
+    const cameFromPorts = returnToPorts;
     closeModal();
     await fetchData();
+    if (cameFromPorts && !portsModal.hidden) loadPorts(); // reflect new registration
   } catch {
     modalError.textContent = '网络错误，请重试';
   }
 });
+
+// ---- 端口速查 (port lookup) ------------------------------------------------
+const portsModal = document.getElementById('portsModal');
+const portsTbody = document.getElementById('portsTbody');
+const portsEmpty = document.getElementById('portsEmpty');
+const portsNote = document.getElementById('portsNote');
+
+let portsData = [];
+const portsSort = { key: 'port', dir: 'asc' };
+
+// Comparable value for each sortable column.
+function portSortVal(p, key) {
+  if (key === 'port') return p.port;
+  if (key === 'registered') return p.registered ? 1 : 0;
+  if (key === 'addr') return (p.addr || '').toLowerCase();
+  // name column sorts by the friendly/process name
+  return (p.suggestedName || p.process || p.command || '').toLowerCase();
+}
+
+function renderPorts() {
+  const { key, dir } = portsSort;
+  const sign = dir === 'asc' ? 1 : -1;
+  const rows = portsData.slice().sort((a, b) => {
+    const va = portSortVal(a, key);
+    const vb = portSortVal(b, key);
+    if (va < vb) return -1 * sign;
+    if (va > vb) return 1 * sign;
+    return (a.port - b.port) * sign; // stable tiebreak by port
+  });
+
+  // header sort indicators
+  for (const th of portsModal.querySelectorAll('th.sortable')) {
+    const on = th.dataset.key === key;
+    th.classList.toggle('sorted', on);
+    th.dataset.dir = on ? dir : '';
+  }
+
+  portsTbody.innerHTML = '';
+  for (const p of rows) {
+    const tr = document.createElement('tr');
+
+    const tdPort = document.createElement('td');
+    tdPort.className = 'col-port';
+    tdPort.innerHTML = `<span class="port-num">${p.port}</span>`;
+    tr.appendChild(tdPort);
+
+    const tdAddr = document.createElement('td');
+    tdAddr.className = 'col-addr';
+    tdAddr.textContent = p.addr || '';
+    tr.appendChild(tdAddr);
+
+    const tdName = document.createElement('td');
+    tdName.className = 'col-name';
+    const primary = p.suggestedName || p.process || '—';
+    const cmd = p.command && p.command !== primary ? p.command : '';
+    tdName.innerHTML =
+      `<span class="pname">${escapeHtml(primary)}</span>` +
+      (cmd ? `<span class="pcmd" title="${escapeHtml(p.command)}">${escapeHtml(cmd)}</span>` : '');
+    tr.appendChild(tdName);
+
+    const tdReg = document.createElement('td');
+    tdReg.className = 'col-reg';
+    if (p.registered) {
+      const pill = document.createElement('span');
+      pill.className = 'reg-pill';
+      pill.innerHTML = `<span class="reg-dot"></span>${escapeHtml(p.registeredName || '已注册')}`;
+      tdReg.appendChild(pill);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn primary reg-btn';
+      btn.textContent = '注册';
+      btn.addEventListener('click', () => openRegisterForPort(p));
+      tdReg.appendChild(btn);
+    }
+    tr.appendChild(tdReg);
+
+    portsTbody.appendChild(tr);
+  }
+
+  const n = rows.length;
+  portsEmpty.hidden = n !== 0;
+  portsNote.textContent = n
+    ? `共 ${n} 个正在监听的 TCP 端口 · 点击表头可排序`
+    : '当前正在监听的 TCP 端口 · 点击表头可排序';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])
+  );
+}
+
+async function loadPorts() {
+  try {
+    const res = await fetch('/api/ports');
+    if (!res.ok) throw new Error('bad response');
+    const json = await res.json();
+    portsData = Array.isArray(json.ports) ? json.ports : [];
+    renderPorts();
+  } catch (err) {
+    console.error('ports fetch failed', err);
+    portsData = [];
+    renderPorts();
+    portsNote.textContent = '读取端口失败，请重试';
+  }
+}
+
+function openPorts() {
+  portsModal.hidden = false;
+  loadPorts();
+}
+function closePorts() {
+  portsModal.hidden = true;
+}
+
+document.getElementById('portsBtn').addEventListener('click', openPorts);
+document.getElementById('portsClose').addEventListener('click', closePorts);
+document.getElementById('portsRefresh').addEventListener('click', loadPorts);
+portsModal.addEventListener('click', (e) => {
+  if (e.target === portsModal) closePorts();
+});
+for (const th of portsModal.querySelectorAll('th.sortable')) {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (portsSort.key === key) {
+      portsSort.dir = portsSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      portsSort.key = key;
+      // ports & registration default to a sensible direction
+      portsSort.dir = key === 'registered' ? 'desc' : 'asc';
+    }
+    renderPorts();
+  });
+}
 
 // ---- boot ------------------------------------------------------------------
 buildRangeSwitch();

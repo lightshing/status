@@ -12,6 +12,7 @@ import {
 } from './store.js';
 import { RANGES, DEFAULT_RANGE } from './ranges.js';
 import { startMonitor, POLL_INTERVAL } from './monitor.js';
+import { listListeningPorts } from './ports.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -178,6 +179,26 @@ const server = http.createServer(async (req, res) => {
         }),
       };
       return sendJson(res, 200, payload);
+    }
+
+    // GET /api/ports — every TCP port currently listened on, with the process
+    // occupying it and whether it's registered here.
+    if (pathName === '/api/ports' && req.method === 'GET') {
+      const ports = await listListeningPorts();
+      const byPort = new Map();
+      for (const svc of services) {
+        if (!byPort.has(svc.port)) byPort.set(svc.port, svc);
+      }
+      const rows = ports.map((p) => {
+        const svc = byPort.get(p.port);
+        return {
+          ...p,
+          registered: !!svc,
+          registeredName: svc ? svc.name : null,
+          registeredId: svc ? svc.id : null,
+        };
+      });
+      return sendJson(res, 200, { ports: rows });
     }
 
     // GET /api/services — metadata only.

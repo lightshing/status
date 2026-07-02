@@ -413,8 +413,134 @@ body {
 }
 .modal-form .form-actions { margin-top: 4px; }
 
+/* register/edit form stacks above the ports lookup when launched from it */
+#formModal { z-index: 210; }
+
+.btn.small { padding: 5px 11px; font-size: 12px; }
+
+/* ---------- 端口速查 (port lookup) ---------- */
+.ports-modal { max-width: 780px; }
+.ports-head-actions { display: flex; align-items: center; gap: 8px; }
+.ports-body { padding: 16px 22px 22px; }
+.ports-note {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.ports-table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: min(60vh, 520px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.ports-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ports-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f7f8fa;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  user-select: none;
+}
+.ports-table th.sortable { cursor: pointer; transition: color 0.15s, background 0.15s; }
+.ports-table th.sortable:hover { color: var(--text); background: #eef0f3; }
+/* sort indicator caret */
+.ports-table th.sortable::after {
+  content: '↕';
+  margin-left: 6px;
+  font-size: 10px;
+  color: var(--faint);
+  opacity: 0.55;
+}
+.ports-table th.sorted { color: var(--text); }
+.ports-table th.sorted[data-dir="asc"]::after { content: '↑'; opacity: 1; color: var(--text); }
+.ports-table th.sorted[data-dir="desc"]::after { content: '↓'; opacity: 1; color: var(--text); }
+
+.ports-table tbody td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.ports-table tbody tr:last-child td { border-bottom: 0; }
+.ports-table tbody tr:hover { background: #fafbfc; }
+
+.ports-table .col-port { width: 78px; }
+.ports-table .port-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+  background: #f1f2f5;
+  border-radius: 5px;
+  padding: 1px 8px;
+  font-size: 12.5px;
+}
+.ports-table .col-addr {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ports-table .col-name { min-width: 220px; max-width: 340px; }
+.ports-table .pname {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ports-table .pcmd {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--faint);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ports-table .col-reg { width: 150px; white-space: nowrap; }
+.reg-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #15803d;
+  background: var(--up-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reg-pill .reg-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--up);
+  flex-shrink: 0;
+}
+.reg-btn { padding: 4px 14px; font-size: 12px; }
+
+.ports-empty {
+  text-align: center;
+  color: var(--faint);
+  padding: 28px 0 6px;
+  font-size: 13px;
+}
+
 @media (max-width: 560px) {
   .modal-form { grid-template-columns: 1fr; }
   .container { padding: 16px; }
   .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 10px; }
+  .ports-table .col-name { max-width: 180px; }
 }
