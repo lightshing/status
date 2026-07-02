@@ -45,9 +45,6 @@
           <button class="icon-btn del" title="删除服务">✕</button>
         </div>
       </div>
-      <div class="card-sub">
-        <span class="since" title="从当前状态开始持续的时长"></span>
-      </div>
       <div class="bar" aria-hidden="true"></div>
       <div class="card-meta">
         <button class="root" title="点击复制路径" hidden>
@@ -55,11 +52,13 @@
           <span class="root-path"></span>
         </button>
         <a class="url" target="_blank" rel="noopener" hidden></a>
+        <span class="since" title="从当前状态开始持续的时长"></span>
       </div>
     </article>
   </template>
 
   <div class="tooltip" id="tooltip" hidden></div>
+  <div class="toast" id="toast"></div>
 
   <div class="modal-backdrop" id="formModal" hidden>
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">

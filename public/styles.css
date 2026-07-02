@@ -223,11 +223,11 @@ body {
 .icon-btn:hover { color: var(--down); background: var(--down-soft); }
 .icon-link:hover { color: var(--text); background: #f1f2f5; }
 
-.card-sub { margin: 8px 0 12px; text-align: right; }
 .since {
-  font-size: 13px;
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
   color: var(--muted);
+  white-space: nowrap;
 }
 .since .val { color: var(--text); font-weight: 600; }
 .since.up .label { color: var(--up); }
@@ -298,9 +298,11 @@ body {
 }
 .card-meta .root .root-ic { flex-shrink: 0; }
 .card-meta .root:hover { background: #f1f2f5; color: var(--muted); }
-.card-meta .root.copied { background: var(--up-soft); color: var(--up); }
 .card-meta .url { color: var(--muted); text-decoration: none; padding: 3px 0; }
 .card-meta .url:hover { color: var(--text); text-decoration: underline; }
+/* duration sits at the far right of the meta row */
+.card-meta .since { margin-left: auto; padding-left: 12px; }
+.card-meta .since.na { color: var(--faint); }
 
 .empty {
   text-align: center;
@@ -331,6 +333,25 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .tooltip .tt-pct { font-weight: 600; }
+
+/* ---------- bottom toast ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%) translateY(8px);
+  background: #1f2430;
+  color: #fff;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 300;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ---------- register / edit modal ---------- */
 .modal-backdrop {

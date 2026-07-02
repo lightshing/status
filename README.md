@@ -6,6 +6,7 @@
 - 🗂 **历史记录**：紧凑的追加式二进制时序存储，1 个月的数据每个服务约 1.3 MB。
 - 🖥 **Web 前端**：挂在 `3333` 端口，浅色简约风格，右上角切换时间范围（近 10 分钟 / 1 小时 / 1 天 / 7 天 / 1 月，默认 1 天），并自动调整展示粒度。
 - ⏱ **运行时长**：实时显示服务自「上次启动」或「上次终止」以来的持续时长，精确到秒；注册前无数据则置灰为「数据不可用」。
+- 🖱 **卡片交互**：点击服务名称即可跳转其公网网址（名称 + ↗ 一体高亮）；点击服务根目录一键复制路径到剪贴板；卡片可编辑、删除。
 - 🚫 **无需性能分析**，无需自动发现端口，一切服务通过网页端手动注册。
 - 📦 **零第三方依赖**，仅使用 Node.js 内置模块。
 
@@ -21,15 +22,48 @@ node src/server.js
 
 然后打开 <http://localhost:3333>。
 
+## 开机自启（systemd）
+
+仓库自带 `deploy/port-health-monitor.service`。安装后随开机自动启动，崩溃自动重启：
+
+```bash
+sudo cp deploy/port-health-monitor.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now port-health-monitor.service
+```
+
+常用命令：
+
+```bash
+systemctl status port-health-monitor     # 查看状态
+systemctl is-enabled port-health-monitor # 是否开机自启（enabled）
+sudo systemctl restart port-health-monitor  # 改动代码后重启以生效
+journalctl -u port-health-monitor -f      # 跟踪日志
+```
+
+> 本机已安装并启用该服务（`enabled` + `running`），无需重复操作。
+
+## 通过反向代理 / Cloudflare Tunnel 访问
+
+前端资源（JS/CSS/HTML）一律以 `Cache-Control: no-store` 返回，且 `index.html` 会
+按文件修改时间自动为静态资源追加版本号（`/app.js?v=<mtime>`），避免 Cloudflare 等
+代理按扩展名缓存旧版本。改动前端后普通刷新即可生效，无需清缓存。
+（极少数情况下若在 Cloudflare 设了 “Cache Everything” 页面规则，需手动 Purge 一次。）
+
 ## 使用
 
-1. 点击页面上方的「**注册服务**」，填写：
+1. 点击左上角标题旁的「**+ 注册服务**」按钮，在弹窗中填写：
    - **服务名称**（必填）
    - **端口号**（必填，1–65535）
-   - **服务根目录**（可选，仅展示）
+   - **服务根目录**（可选，用于展示与一键复制）
    - **公网网址**（可选，仅用于页面跳转，**不会被监测**）
 2. 注册后即开始每 10 秒探测一次，历史条会逐步填充。
-3. 右上角切换时间范围，历史条的聚合粒度会自动变化：
+3. 每张服务卡片：
+   - 状态圆点（绿=在线 / 红=离线 / 灰=未知）+ 服务名 + 端口徽章；
+   - 点击**服务名**跳转公网网址（若已填）；右上角显示所选范围内的**在线率**，以及**编辑 ✎ / 删除 ✕**；
+   - 中部为全宽无缝**状态历史条**，鼠标悬停某一格可查看该时段的时间区间、在线率与探测次数；
+   - 底部一行：**📁 服务根目录**（点击复制路径，页面底部弹出「已复制」提示）、**🔗 公网网址**，以及右对齐的**运行/中断时长**（每秒实时跳动，无数据则灰显「数据不可用」）。
+4. 右上角切换时间范围，历史条的聚合粒度会自动变化：
 
    | 范围 | 时间窗口 | 每格粒度 |
    |------|---------|---------|
@@ -38,8 +72,6 @@ node src/server.js
    | 近 1 天（默认）| 24 h | 10 分钟 |
    | 近 7 天 | 7 d | 1 小时 |
    | 近 1 月 | 30 d | 6 小时 |
-
-   将鼠标悬停在历史条的某一格上，可查看该时间段的在线率与探测次数。
 
 ## 时间范围与粒度
 
@@ -81,7 +113,9 @@ src/
 public/
   index.html   页面结构
   styles.css   beszel 风格浅色主题
-  app.js        前端逻辑（渲染、计数器、tooltip、注册/删除）
+  app.js        前端逻辑（渲染、计数器、tooltip、toast、注册/编辑/删除、复制）
+deploy/
+  port-health-monitor.service   systemd 开机自启单元
 data/          运行时数据（不纳入版本控制）
 ```
 

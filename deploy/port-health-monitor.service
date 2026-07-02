@@ -1,0 +1,17 @@
+[Unit]
+Description=Port Health Monitor (端口健康监测)
+Documentation=https://localhost:3333
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/status
+ExecStart=/usr/bin/node /home/ubuntu/status/src/server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

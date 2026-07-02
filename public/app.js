@@ -133,7 +133,7 @@ function renderCard(svc) {
   if (svc.rootDir) {
     root.hidden = false;
     node.querySelector('.root-path').textContent = svc.rootDir;
-    root.addEventListener('click', () => copyPath(root, svc.rootDir));
+    root.addEventListener('click', () => copyPath(svc.rootDir));
   }
   const url = node.querySelector('.url');
   if (svc.publicUrl) {
@@ -221,8 +221,20 @@ document.addEventListener('mousemove', (e) => {
   els.tooltip.style.top = e.clientY + 16 + 'px';
 });
 
-// Copy a path to the clipboard with brief in-place feedback.
-async function copyPath(btn, text) {
+// Bottom-of-page transient notification.
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.remove('show');
+  void t.offsetWidth; // restart the transition
+  t.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1500);
+}
+
+// Copy a path to the clipboard; feedback is shown as a bottom toast only.
+async function copyPath(text) {
   let ok = false;
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -245,16 +257,7 @@ async function copyPath(btn, text) {
       ok = false;
     }
   }
-  const pathEl = btn.querySelector('.root-path');
-  if (btn._revert) clearTimeout(btn._revert);
-  else btn.dataset.orig = pathEl.textContent;
-  pathEl.textContent = ok ? '已复制' : '复制失败';
-  btn.classList.add('copied');
-  btn._revert = setTimeout(() => {
-    pathEl.textContent = btn.dataset.orig;
-    btn.classList.remove('copied');
-    btn._revert = null;
-  }, 1200);
+  showToast(ok ? '已复制' : '复制失败');
 }
 
 async function deleteService(id, name) {
