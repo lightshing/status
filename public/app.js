@@ -9,7 +9,7 @@ const state = {
   data: null,
   clockOffset: 0, // serverNow - clientNow, to keep counters accurate
   bucketSec: 0,
-  animateBars: false, // one-shot: scale bars in after a range switch
+  zoomFromWindow: null, // one-shot: window (sec) we're zooming from on a range switch
 };
 
 const els = {
@@ -42,8 +42,9 @@ function buildRangeSwitch() {
     btn.setAttribute('role', 'tab');
     btn.addEventListener('click', () => {
       if (state.range === key) return;
+      // remember the span we're leaving so the bar can zoom by the real ratio
+      state.zoomFromWindow = state.data ? state.data.window : null;
       state.range = key;
-      state.animateBars = true; // re-scale the bars in on range change
       moveRangeThumb();
       fetchData();
     });
@@ -105,8 +106,29 @@ function render() {
   for (const svc of services) {
     els.list.appendChild(renderCard(svc));
   }
-  state.animateBars = false; // consume the one-shot range-change animation
+  zoomBars();
   updateCounters();
+}
+
+// One-shot timeline zoom after a range switch: scale each bar's track along the
+// horizontal (time) axis from the tail. Shrinking the range (newWindow <
+// oldWindow) starts the finer bar compressed at the tail and stretches it out;
+// expanding starts zoomed on the tail and shrinks the whole bar down to reveal
+// the wider span. The scale factor is the real ratio of the two windows.
+function zoomBars() {
+  const from = state.zoomFromWindow;
+  state.zoomFromWindow = null;
+  if (!from || !state.data || !state.data.window) return;
+  const startScale = state.data.window / from;
+  if (!isFinite(startScale) || startScale <= 0 || Math.abs(startScale - 1) < 0.01) return;
+  for (const inner of els.list.querySelectorAll('.bar-inner')) {
+    if (inner.animate) {
+      inner.animate(
+        [{ transform: `scaleX(${startScale})` }, { transform: 'scaleX(1)' }],
+        { duration: 460, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' }
+      );
+    }
+  }
 }
 
 function renderCard(svc) {
@@ -138,7 +160,7 @@ function renderCard(svc) {
 
   // status bar cells
   const bar = node.querySelector('.bar');
-  if (state.animateBars) bar.classList.add('animate-in');
+  const barInner = bar.querySelector('.bar-inner');
   const frag = document.createDocumentFragment();
   let hasData = false;
   for (const b of svc.buckets) {
@@ -152,7 +174,7 @@ function renderCard(svc) {
     cell.dataset.ratio = ratio === null ? '' : ratio;
     frag.appendChild(cell);
   }
-  bar.appendChild(frag);
+  barInner.appendChild(frag);
   if (!hasData) bar.classList.add('no-data');
 
   // meta — root dir is click-to-copy
