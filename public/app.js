@@ -98,10 +98,16 @@ function renderCard(svc) {
   const pct = node.querySelector('.uptime-pct');
   pct.textContent = svc.uptimePct === null ? '' : svc.uptimePct.toFixed(1) + '% 在线';
 
-  const jump = node.querySelector('.jump');
+  // name doubles as the jump link when a public URL is set
+  const nameLink = node.querySelector('.name-link');
   if (svc.publicUrl) {
-    jump.hidden = false;
-    jump.href = svc.publicUrl;
+    nameLink.href = svc.publicUrl;
+    nameLink.target = '_blank';
+    nameLink.rel = 'noopener';
+    nameLink.classList.add('linkable');
+    node.querySelector('.jump-icon').hidden = false;
+  } else {
+    nameLink.removeAttribute('title');
   }
 
   // status bar cells
@@ -122,9 +128,13 @@ function renderCard(svc) {
   bar.appendChild(frag);
   if (!hasData) bar.classList.add('no-data');
 
-  // meta
+  // meta — root dir is click-to-copy
   const root = node.querySelector('.root');
-  root.textContent = svc.rootDir ? '📁 ' + svc.rootDir : '';
+  if (svc.rootDir) {
+    root.hidden = false;
+    node.querySelector('.root-path').textContent = svc.rootDir;
+    root.addEventListener('click', () => copyPath(root, svc.rootDir));
+  }
   const url = node.querySelector('.url');
   if (svc.publicUrl) {
     url.hidden = false;
@@ -210,6 +220,42 @@ document.addEventListener('mousemove', (e) => {
   els.tooltip.style.left = x + 'px';
   els.tooltip.style.top = e.clientY + 16 + 'px';
 });
+
+// Copy a path to the clipboard with brief in-place feedback.
+async function copyPath(btn, text) {
+  let ok = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } else {
+      throw new Error('no clipboard api');
+    }
+  } catch {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch {
+      ok = false;
+    }
+  }
+  const pathEl = btn.querySelector('.root-path');
+  if (btn._revert) clearTimeout(btn._revert);
+  else btn.dataset.orig = pathEl.textContent;
+  pathEl.textContent = ok ? '已复制' : '复制失败';
+  btn.classList.add('copied');
+  btn._revert = setTimeout(() => {
+    pathEl.textContent = btn.dataset.orig;
+    btn.classList.remove('copied');
+    btn._revert = null;
+  }, 1200);
+}
 
 async function deleteService(id, name) {
   if (!confirm(`确定删除「${name}」及其全部历史记录？`)) return;

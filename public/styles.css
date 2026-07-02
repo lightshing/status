@@ -162,7 +162,31 @@ body {
 
 .card-head { display: flex; align-items: center; justify-content: space-between; }
 .card-title { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.card-title .name { font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+/* name + jump arrow read as one hoverable unit */
+.name-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 7px;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.name-link .name {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.name-link.linkable { cursor: pointer; }
+.name-link.linkable:hover { background: #f1f2f5; }
+.jump-icon { font-size: 12px; color: var(--faint); line-height: 1; flex-shrink: 0; }
+.name-link.linkable:hover .jump-icon { color: var(--text); }
 
 .dot {
   width: 9px; height: 9px; border-radius: 50%;
@@ -199,7 +223,7 @@ body {
 .icon-btn:hover { color: var(--down); background: var(--down-soft); }
 .icon-link:hover { color: var(--text); background: #f1f2f5; }
 
-.card-sub { margin: 8px 0 12px; }
+.card-sub { margin: 8px 0 12px; text-align: right; }
 .since {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
@@ -243,14 +267,39 @@ body {
 
 .card-meta {
   display: flex;
-  gap: 16px;
+  align-items: center;
+  gap: 10px;
   margin-top: 12px;
   font-size: 12px;
   color: var(--faint);
   flex-wrap: wrap;
 }
-.card-meta .root { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.card-meta .url { color: var(--muted); text-decoration: none; }
+/* root dir is a click-to-copy button, emphasized on hover like the jump link */
+.card-meta .root {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--faint);
+  padding: 3px 7px;
+  margin: -3px -1px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+  max-width: 100%;
+}
+.card-meta .root .root-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-meta .root .root-ic { flex-shrink: 0; }
+.card-meta .root:hover { background: #f1f2f5; color: var(--muted); }
+.card-meta .root.copied { background: var(--up-soft); color: var(--up); }
+.card-meta .url { color: var(--muted); text-decoration: none; padding: 3px 0; }
 .card-meta .url:hover { color: var(--text); text-decoration: underline; }
 
 .empty {

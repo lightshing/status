@@ -33,12 +33,14 @@
       <div class="card-head">
         <div class="card-title">
           <span class="dot"></span>
-          <span class="name"></span>
+          <a class="name-link" title="打开公网网址">
+            <span class="name"></span>
+            <span class="jump-icon" hidden>↗</span>
+          </a>
           <span class="port-badge"></span>
         </div>
         <div class="card-actions">
           <span class="uptime-pct" title="所选时间范围内的在线率"></span>
-          <a class="icon-link jump" target="_blank" rel="noopener" title="打开公网网址" hidden>↗</a>
           <button class="icon-btn edit" title="编辑服务">✎</button>
           <button class="icon-btn del" title="删除服务">✕</button>
         </div>
@@ -48,7 +50,10 @@
       </div>
       <div class="bar" aria-hidden="true"></div>
       <div class="card-meta">
-        <span class="root" title="服务根目录"></span>
+        <button class="root" title="点击复制路径" hidden>
+          <span class="root-ic">📁</span>
+          <span class="root-path"></span>
+        </button>
         <a class="url" target="_blank" rel="noopener" hidden></a>
       </div>
     </article>
