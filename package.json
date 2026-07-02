@@ -1,0 +1,14 @@
+{
+  "name": "port-health-monitor",
+  "version": "1.0.0",
+  "description": "Lightweight local port/service health monitor with a beszel-style web UI",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

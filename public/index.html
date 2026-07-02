@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>端口健康监测</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='%2310b981'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <h1>端口健康监测</h1>
+    </div>
+    <div class="range-switch" id="rangeSwitch" role="tablist" aria-label="时间范围">
+      <!-- range buttons injected here -->
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel add-panel">
+      <button class="add-toggle" id="addToggle" aria-expanded="false">
+        <span class="plus">+</span> 注册服务
+      </button>
+      <form class="add-form" id="addForm" hidden>
+        <div class="field">
+          <label for="f-name">服务名称</label>
+          <input id="f-name" name="name" type="text" placeholder="例如 API 网关" required />
+        </div>
+        <div class="field">
+          <label for="f-port">端口号</label>
+          <input id="f-port" name="port" type="number" min="1" max="65535" placeholder="8080" required />
+        </div>
+        <div class="field">
+          <label for="f-root">服务根目录</label>
+          <input id="f-root" name="rootDir" type="text" placeholder="/opt/app" />
+        </div>
+        <div class="field">
+          <label for="f-url">公网网址</label>
+          <input id="f-url" name="publicUrl" type="text" placeholder="https://example.com" />
+        </div>
+        <div class="form-actions">
+          <span class="form-error" id="formError"></span>
+          <button type="button" class="btn ghost" id="cancelAdd">取消</button>
+          <button type="submit" class="btn primary" id="submitAdd">注册</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="serviceList" class="service-list"></section>
+    <p class="empty" id="emptyHint" hidden>还没有注册任何服务，点击上方「注册服务」开始监测。</p>
+  </main>
+
+  <footer class="foot">
+    <span id="footMeta">每 10 秒记录一次</span>
+  </footer>
+
+  <template id="cardTpl">
+    <article class="card">
+      <div class="card-head">
+        <div class="card-title">
+          <span class="dot"></span>
+          <span class="name"></span>
+          <span class="port-badge"></span>
+        </div>
+        <div class="card-actions">
+          <span class="uptime-pct" title="所选时间范围内的在线率"></span>
+          <a class="icon-link jump" target="_blank" rel="noopener" title="打开公网网址" hidden>↗</a>
+          <button class="icon-btn del" title="删除服务">✕</button>
+        </div>
+      </div>
+      <div class="card-sub">
+        <span class="since" title="从当前状态开始持续的时长"></span>
+      </div>
+      <div class="bar" aria-hidden="true"></div>
+      <div class="card-meta">
+        <span class="root" title="服务根目录"></span>
+        <a class="url" target="_blank" rel="noopener" hidden></a>
+      </div>
+    </article>
+  </template>
+
+  <div class="tooltip" id="tooltip" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
