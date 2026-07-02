@@ -382,8 +382,9 @@ modal.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  // The register form stacks above 端口速查 — close it first, then the ports modal.
+  // Register / ignore forms stack above 端口速查 — close the topmost first.
   if (!modal.hidden) closeModal();
+  else if (!ignoreModal.hidden) closeIgnore();
   else if (!portsModal.hidden) closePorts();
 });
 
@@ -486,12 +487,35 @@ function renderPorts() {
       pill.className = 'reg-pill';
       pill.innerHTML = `<span class="reg-dot"></span>${escapeHtml(p.registeredName || '已注册')}`;
       tdReg.appendChild(pill);
+    } else if (p.ignored) {
+      // Ignored: a muted pill (with the note, if any) and a way to undo.
+      const pill = document.createElement('span');
+      pill.className = 'ignore-pill';
+      pill.textContent = '已忽略';
+      if (p.ignoreNote) {
+        pill.title = p.ignoreNote;
+        const note = document.createElement('span');
+        note.className = 'ignore-note';
+        note.textContent = p.ignoreNote;
+        pill.appendChild(note);
+      }
+      tdReg.appendChild(pill);
+      const undo = document.createElement('button');
+      undo.className = 'btn ghost small reg-btn';
+      undo.textContent = '取消忽略';
+      undo.addEventListener('click', () => unignorePort(p.port));
+      tdReg.appendChild(undo);
     } else {
       const btn = document.createElement('button');
       btn.className = 'btn primary reg-btn';
       btn.textContent = '注册';
       btn.addEventListener('click', () => openRegisterForPort(p));
       tdReg.appendChild(btn);
+      const ign = document.createElement('button');
+      ign.className = 'btn ghost small reg-btn';
+      ign.textContent = '忽略';
+      ign.addEventListener('click', () => openIgnore(p));
+      tdReg.appendChild(ign);
     }
     tr.appendChild(tdReg);
 
@@ -533,6 +557,69 @@ function openPorts() {
 function closePorts() {
   portsModal.hidden = true;
 }
+
+// ---- ignore a port ---------------------------------------------------------
+const ignoreModal = document.getElementById('ignoreModal');
+const ignoreForm = document.getElementById('ignoreForm');
+const ignoreNoteEl = document.getElementById('f-ignore-note');
+const ignoreError = document.getElementById('ignoreError');
+const ignoreHint = document.getElementById('ignoreHint');
+let ignoringPort = null;
+
+function openIgnore(p) {
+  ignoringPort = p.port;
+  ignoreError.textContent = '';
+  ignoreNoteEl.value = '';
+  const label = p.suggestedName || p.process || '';
+  ignoreHint.textContent = label
+    ? `将端口 ${p.port}（${label}）从「未注册」提醒中隐藏。备注可留空。`
+    : `将端口 ${p.port} 从「未注册」提醒中隐藏。备注可留空。`;
+  ignoreModal.hidden = false;
+  ignoreNoteEl.focus();
+}
+
+function closeIgnore() {
+  ignoreModal.hidden = true;
+  ignoringPort = null;
+}
+
+ignoreForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (ignoringPort == null) return;
+  ignoreError.textContent = '';
+  try {
+    const res = await fetch('/api/ports/ignore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ port: ignoringPort, note: ignoreNoteEl.value.trim() }),
+    });
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      ignoreError.textContent = json.error || '忽略失败';
+      return;
+    }
+    closeIgnore();
+    loadPorts();
+  } catch {
+    ignoreError.textContent = '网络错误，请重试';
+  }
+});
+
+async function unignorePort(port) {
+  try {
+    const res = await fetch('/api/ports/ignore/' + port, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) throw new Error('bad response');
+  } catch (err) {
+    console.error('unignore failed', err);
+  }
+  loadPorts();
+}
+
+document.getElementById('ignoreClose').addEventListener('click', closeIgnore);
+document.getElementById('ignoreCancel').addEventListener('click', closeIgnore);
+ignoreModal.addEventListener('click', (e) => {
+  if (e.target === ignoreModal) closeIgnore();
+});
 
 document.getElementById('portsBtn').addEventListener('click', openPorts);
 document.getElementById('portsClose').addEventListener('click', closePorts);

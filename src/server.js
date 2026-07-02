@@ -9,6 +9,8 @@ import {
   newId,
   readChecks,
   deleteChecks,
+  loadIgnores,
+  saveIgnores,
 } from './store.js';
 import { RANGES, DEFAULT_RANGE } from './ranges.js';
 import { startMonitor, POLL_INTERVAL } from './monitor.js';
@@ -20,6 +22,7 @@ const PORT = 3333;
 
 // ---- In-memory state (source of truth, mirrored to disk) -------------------
 let services = loadServices();
+let ignores = loadIgnores();
 
 function persist(force) {
   if (force) saveServicesNow(services);
@@ -189,16 +192,55 @@ const server = http.createServer(async (req, res) => {
       for (const svc of services) {
         if (!byPort.has(svc.port)) byPort.set(svc.port, svc);
       }
+      const ignoreByPort = new Map(ignores.map((ig) => [ig.port, ig]));
       const rows = ports.map((p) => {
         const svc = byPort.get(p.port);
+        const ig = ignoreByPort.get(p.port);
         return {
           ...p,
           registered: !!svc,
           registeredName: svc ? svc.name : null,
           registeredId: svc ? svc.id : null,
+          ignored: !!ig,
+          ignoreNote: ig ? ig.note || '' : '',
         };
       });
       return sendJson(res, 200, { ports: rows });
+    }
+
+    // POST /api/ports/ignore — hide an unregistered port from the nag.
+    // Body: { port, note? }. Note is optional. Re-posting updates the note.
+    if (pathName === '/api/ports/ignore' && req.method === 'POST') {
+      const raw = await readBody(req);
+      let body;
+      try {
+        body = JSON.parse(raw || '{}');
+      } catch {
+        return sendJson(res, 400, { error: '无效的 JSON' });
+      }
+      const port = Number(body.port);
+      if (!Number.isInteger(port) || port < 1 || port > 65535)
+        return sendJson(res, 400, { error: '端口号必须是 1-65535 之间的整数' });
+      const note = String(body.note ?? '').trim();
+      const existing = ignores.find((ig) => ig.port === port);
+      if (existing) {
+        existing.note = note;
+      } else {
+        ignores.push({ port, note, createdAt: Date.now() });
+      }
+      saveIgnores(ignores);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    // DELETE /api/ports/ignore/:port — un-ignore a port.
+    const unignoreMatch = pathName.match(/^\/api\/ports\/ignore\/(\d+)$/);
+    if (unignoreMatch && req.method === 'DELETE') {
+      const port = Number(unignoreMatch[1]);
+      const idx = ignores.findIndex((ig) => ig.port === port);
+      if (idx === -1) return sendJson(res, 404, { error: '该端口未被忽略' });
+      ignores.splice(idx, 1);
+      saveIgnores(ignores);
+      return sendJson(res, 200, { ok: true });
     }
 
     // GET /api/services — metadata only.

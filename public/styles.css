@@ -413,8 +413,9 @@ body {
 }
 .modal-form .form-actions { margin-top: 4px; }
 
-/* register/edit form stacks above the ports lookup when launched from it */
-#formModal { z-index: 210; }
+/* register/edit + ignore forms stack above the ports lookup */
+#formModal, #ignoreModal { z-index: 210; }
+#ignoreForm .field { grid-column: 1 / -1; }
 
 .btn.small { padding: 5px 11px; font-size: 12px; }
 
@@ -509,7 +510,13 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ports-table .col-reg { width: 150px; white-space: nowrap; }
+.ports-table .col-reg { width: 200px; white-space: nowrap; }
+.ports-table td.col-reg {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 .reg-pill {
   display: inline-flex;
   align-items: center;
@@ -530,6 +537,37 @@ body {
   flex-shrink: 0;
 }
 .reg-btn { padding: 4px 14px; font-size: 12px; }
+
+/* Ignored port: a muted pill, with the optional note trailing after it. */
+.ignore-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: #eef0f3;
+  border-radius: 999px;
+  padding: 3px 10px;
+  max-width: 100%;
+  overflow: hidden;
+}
+.ignore-pill .ignore-note {
+  font-weight: 400;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.ignore-hint {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
 
 .ports-empty {
   text-align: center;

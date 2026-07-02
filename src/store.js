@@ -18,6 +18,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const CHECKS_DIR = path.join(DATA_DIR, 'checks');
 const SERVICES_FILE = path.join(DATA_DIR, 'services.json');
+const IGNORES_FILE = path.join(DATA_DIR, 'ignores.json');
 
 const RECORD_SIZE = 5;
 
@@ -59,6 +60,28 @@ export function saveServicesNow(services) {
 
 export function newId() {
   return crypto.randomBytes(8).toString('hex');
+}
+
+// ---- Ignored ports ---------------------------------------------------------
+// Ports the user has chosen to hide from the "unregistered" nag in 端口速查.
+// Keyed by port number, with an optional free-text note. Stored in
+// data/ignores.json as { ignores: [{ port, note, createdAt }] }.
+export function loadIgnores() {
+  ensureDirs();
+  try {
+    const raw = fs.readFileSync(IGNORES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.ignores) ? parsed.ignores : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveIgnores(ignores) {
+  ensureDirs();
+  const tmp = IGNORES_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify({ ignores }, null, 2));
+  fs.renameSync(tmp, IGNORES_FILE);
 }
 
 function checkFile(id) {

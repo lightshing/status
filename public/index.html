@@ -122,6 +122,27 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="ignoreModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ignoreTitle">
+      <div class="modal-head">
+        <h2 id="ignoreTitle">忽略端口</h2>
+        <button class="icon-btn" id="ignoreClose" title="关闭">✕</button>
+      </div>
+      <form class="modal-form" id="ignoreForm">
+        <p class="ignore-hint" id="ignoreHint">将端口从「未注册」提醒中隐藏。备注可留空。</p>
+        <div class="field">
+          <label for="f-ignore-note">备注（可选）</label>
+          <input id="f-ignore-note" name="note" type="text" placeholder="例如 系统进程、临时调试…" />
+        </div>
+        <div class="form-actions">
+          <span class="form-error" id="ignoreError"></span>
+          <button type="button" class="btn ghost" id="ignoreCancel">取消</button>
+          <button type="submit" class="btn primary" id="ignoreSubmit">忽略</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="/app.js?v=__V__"></script>
 </body>
 </html>
