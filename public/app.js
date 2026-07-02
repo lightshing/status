@@ -15,10 +15,6 @@ const els = {
   rangeSwitch: document.getElementById('rangeSwitch'),
   list: document.getElementById('serviceList'),
   emptyHint: document.getElementById('emptyHint'),
-  addToggle: document.getElementById('addToggle'),
-  addForm: document.getElementById('addForm'),
-  cancelAdd: document.getElementById('cancelAdd'),
-  formError: document.getElementById('formError'),
   footMeta: document.getElementById('footMeta'),
   tooltip: document.getElementById('tooltip'),
   cardTpl: document.getElementById('cardTpl'),
@@ -215,52 +211,6 @@ document.addEventListener('mousemove', (e) => {
   els.tooltip.style.top = e.clientY + 16 + 'px';
 });
 
-// ---- add / delete ----------------------------------------------------------
-els.addToggle.addEventListener('click', () => {
-  const open = !els.addForm.hidden;
-  els.addForm.hidden = open;
-  els.addToggle.setAttribute('aria-expanded', String(!open));
-  els.formError.textContent = '';
-  if (!open) document.getElementById('f-name').focus();
-});
-
-els.cancelAdd.addEventListener('click', () => {
-  els.addForm.hidden = true;
-  els.addToggle.setAttribute('aria-expanded', 'false');
-  els.addForm.reset();
-  els.formError.textContent = '';
-});
-
-els.addForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  els.formError.textContent = '';
-  const fd = new FormData(els.addForm);
-  const body = {
-    name: fd.get('name'),
-    port: fd.get('port'),
-    rootDir: fd.get('rootDir'),
-    publicUrl: fd.get('publicUrl'),
-  };
-  try {
-    const res = await fetch('/api/services', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      els.formError.textContent = json.error || '注册失败';
-      return;
-    }
-    els.addForm.reset();
-    els.addForm.hidden = true;
-    els.addToggle.setAttribute('aria-expanded', 'false');
-    await fetchData();
-  } catch {
-    els.formError.textContent = '网络错误，请重试';
-  }
-});
-
 async function deleteService(id, name) {
   if (!confirm(`确定删除「${name}」及其全部历史记录？`)) return;
   try {
@@ -271,66 +221,74 @@ async function deleteService(id, name) {
   }
 }
 
-// ---- edit modal ------------------------------------------------------------
-const editModal = document.getElementById('editModal');
-const editForm = document.getElementById('editForm');
-const editError = document.getElementById('editError');
-let editingId = null;
+// ---- register / edit modal (shared) ----------------------------------------
+const modal = document.getElementById('formModal');
+const modalForm = document.getElementById('svcForm');
+const modalTitle = document.getElementById('modalTitle');
+const modalSubmit = document.getElementById('modalSubmit');
+const modalError = document.getElementById('formError');
+let editingId = null; // null => register mode, otherwise edit that id
 
-function openEdit(svc) {
-  editingId = svc.id;
-  // NB: access inputs by id — `editForm.name` collides with the form's own
-  // `.name` property and would not return the input element.
-  const nameEl = document.getElementById('e-name');
-  nameEl.value = svc.name;
-  document.getElementById('e-port').value = svc.port;
-  document.getElementById('e-root').value = svc.rootDir || '';
-  document.getElementById('e-url').value = svc.publicUrl || '';
-  editError.textContent = '';
-  editModal.hidden = false;
+function openModal(svc) {
+  editingId = svc ? svc.id : null;
+  modalTitle.textContent = svc ? '编辑服务' : '注册服务';
+  modalSubmit.textContent = svc ? '保存' : '注册';
+  modalError.textContent = '';
+  const nameEl = document.getElementById('f-name');
+  nameEl.value = svc ? svc.name : '';
+  document.getElementById('f-port').value = svc ? svc.port : '';
+  document.getElementById('f-root').value = svc ? svc.rootDir || '' : '';
+  document.getElementById('f-url').value = svc ? svc.publicUrl || '' : '';
+  modal.hidden = false;
   nameEl.focus();
 }
 
-function closeEdit() {
-  editModal.hidden = true;
+function openEdit(svc) {
+  openModal(svc);
+}
+
+function closeModal() {
+  modal.hidden = true;
   editingId = null;
 }
 
-document.getElementById('editClose').addEventListener('click', closeEdit);
-document.getElementById('editCancel').addEventListener('click', closeEdit);
-editModal.addEventListener('click', (e) => {
-  if (e.target === editModal) closeEdit();
+document.getElementById('addBtn').addEventListener('click', () => openModal(null));
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('modalCancel').addEventListener('click', closeModal);
+modal.addEventListener('click', (e) => {
+  if (e.target === modal) closeModal();
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && !editModal.hidden) closeEdit();
+  if (e.key === 'Escape' && !modal.hidden) closeModal();
 });
 
-editForm.addEventListener('submit', async (e) => {
+modalForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!editingId) return;
-  editError.textContent = '';
-  const fd = new FormData(editForm);
+  modalError.textContent = '';
+  const fd = new FormData(modalForm);
   const body = {
     name: fd.get('name'),
     port: fd.get('port'),
     rootDir: fd.get('rootDir'),
     publicUrl: fd.get('publicUrl'),
   };
+  const url = editingId ? '/api/services/' + editingId : '/api/services';
+  const method = editingId ? 'PUT' : 'POST';
   try {
-    const res = await fetch('/api/services/' + editingId, {
-      method: 'PUT',
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
     const json = await res.json();
     if (!res.ok) {
-      editError.textContent = json.error || '保存失败';
+      modalError.textContent = json.error || (editingId ? '保存失败' : '注册失败');
       return;
     }
-    closeEdit();
+    closeModal();
     await fetchData();
   } catch {
-    editError.textContent = '网络错误，请重试';
+    modalError.textContent = '网络错误，请重试';
   }
 });
 

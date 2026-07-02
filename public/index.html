@@ -12,6 +12,7 @@
     <div class="brand">
       <span class="brand-dot"></span>
       <h1>端口健康监测</h1>
+      <button class="btn primary add-btn" id="addBtn"><span class="plus">+</span> 注册服务</button>
     </div>
     <div class="range-switch" id="rangeSwitch" role="tablist" aria-label="时间范围">
       <!-- range buttons injected here -->
@@ -19,37 +20,8 @@
   </header>
 
   <main class="container">
-    <section class="panel add-panel">
-      <button class="add-toggle" id="addToggle" aria-expanded="false">
-        <span class="plus">+</span> 注册服务
-      </button>
-      <form class="add-form" id="addForm" hidden>
-        <div class="field">
-          <label for="f-name">服务名称</label>
-          <input id="f-name" name="name" type="text" placeholder="例如 API 网关" required />
-        </div>
-        <div class="field">
-          <label for="f-port">端口号</label>
-          <input id="f-port" name="port" type="number" min="1" max="65535" placeholder="8080" required />
-        </div>
-        <div class="field">
-          <label for="f-root">服务根目录</label>
-          <input id="f-root" name="rootDir" type="text" placeholder="/opt/app" />
-        </div>
-        <div class="field">
-          <label for="f-url">公网网址</label>
-          <input id="f-url" name="publicUrl" type="text" placeholder="https://example.com" />
-        </div>
-        <div class="form-actions">
-          <span class="form-error" id="formError"></span>
-          <button type="button" class="btn ghost" id="cancelAdd">取消</button>
-          <button type="submit" class="btn primary" id="submitAdd">注册</button>
-        </div>
-      </form>
-    </section>
-
     <section id="serviceList" class="service-list"></section>
-    <p class="empty" id="emptyHint" hidden>还没有注册任何服务，点击上方「注册服务」开始监测。</p>
+    <p class="empty" id="emptyHint" hidden>还没有注册任何服务，点击左上角「注册服务」开始监测。</p>
   </main>
 
   <footer class="foot">
@@ -84,33 +56,33 @@
 
   <div class="tooltip" id="tooltip" hidden></div>
 
-  <div class="modal-backdrop" id="editModal" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editTitle">
+  <div class="modal-backdrop" id="formModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
       <div class="modal-head">
-        <h2 id="editTitle">编辑服务</h2>
-        <button class="icon-btn" id="editClose" title="关闭">✕</button>
+        <h2 id="modalTitle">注册服务</h2>
+        <button class="icon-btn" id="modalClose" title="关闭">✕</button>
       </div>
-      <form class="add-form" id="editForm">
+      <form class="modal-form" id="svcForm">
         <div class="field">
-          <label for="e-name">服务名称</label>
-          <input id="e-name" name="name" type="text" required />
+          <label for="f-name">服务名称</label>
+          <input id="f-name" name="name" type="text" placeholder="例如 API 网关" required />
         </div>
         <div class="field">
-          <label for="e-port">端口号</label>
-          <input id="e-port" name="port" type="number" min="1" max="65535" required />
+          <label for="f-port">端口号</label>
+          <input id="f-port" name="port" type="number" min="1" max="65535" placeholder="8080" required />
         </div>
         <div class="field">
-          <label for="e-root">服务根目录</label>
-          <input id="e-root" name="rootDir" type="text" placeholder="/opt/app" />
+          <label for="f-root">服务根目录</label>
+          <input id="f-root" name="rootDir" type="text" placeholder="/opt/app" />
         </div>
         <div class="field">
-          <label for="e-url">公网网址</label>
-          <input id="e-url" name="publicUrl" type="text" placeholder="https://example.com" />
+          <label for="f-url">公网网址</label>
+          <input id="f-url" name="publicUrl" type="text" placeholder="https://example.com" />
         </div>
         <div class="form-actions">
-          <span class="form-error" id="editError"></span>
-          <button type="button" class="btn ghost" id="editCancel">取消</button>
-          <button type="submit" class="btn primary">保存</button>
+          <span class="form-error" id="formError"></span>
+          <button type="button" class="btn ghost" id="modalCancel">取消</button>
+          <button type="submit" class="btn primary" id="modalSubmit">注册</button>
         </div>
       </form>
     </div>
