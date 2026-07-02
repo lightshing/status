@@ -279,13 +279,16 @@ let editingId = null;
 
 function openEdit(svc) {
   editingId = svc.id;
-  editForm.name.value = svc.name;
-  editForm.port.value = svc.port;
-  editForm.rootDir.value = svc.rootDir || '';
-  editForm.publicUrl.value = svc.publicUrl || '';
+  // NB: access inputs by id — `editForm.name` collides with the form's own
+  // `.name` property and would not return the input element.
+  const nameEl = document.getElementById('e-name');
+  nameEl.value = svc.name;
+  document.getElementById('e-port').value = svc.port;
+  document.getElementById('e-root').value = svc.rootDir || '';
+  document.getElementById('e-url').value = svc.publicUrl || '';
   editError.textContent = '';
   editModal.hidden = false;
-  editForm.name.focus();
+  nameEl.focus();
 }
 
 function closeEdit() {
@@ -306,11 +309,12 @@ editForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!editingId) return;
   editError.textContent = '';
+  const fd = new FormData(editForm);
   const body = {
-    name: editForm.name.value,
-    port: editForm.port.value,
-    rootDir: editForm.rootDir.value,
-    publicUrl: editForm.publicUrl.value,
+    name: fd.get('name'),
+    port: fd.get('port'),
+    rootDir: fd.get('rootDir'),
+    publicUrl: fd.get('publicUrl'),
   };
   try {
     const res = await fetch('/api/services/' + editingId, {

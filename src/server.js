@@ -97,6 +97,18 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
 };
 
+// Version token derived from asset mtimes, used for cache-busting query
+// strings so a proxy (e.g. Cloudflare) or browser can't serve stale JS/CSS.
+function assetVersion() {
+  try {
+    const a = fs.statSync(path.join(PUBLIC_DIR, 'app.js')).mtimeMs;
+    const c = fs.statSync(path.join(PUBLIC_DIR, 'styles.css')).mtimeMs;
+    return String(Math.floor(Math.max(a, c)));
+  } catch {
+    return '1';
+  }
+}
+
 function serveStatic(req, res, urlPath) {
   let rel = urlPath === '/' ? '/index.html' : urlPath;
   const filePath = path.join(PUBLIC_DIR, path.normalize(rel));
@@ -110,7 +122,19 @@ function serveStatic(req, res, urlPath) {
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    // Never let JS/CSS/HTML be cached by intermediaries — this app is served
+    // through tunnels/proxies and must always reflect the latest deploy.
+    const headers = {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': 'no-store, must-revalidate',
+    };
+    if (ext === '.html') {
+      const html = buf.toString('utf8').replace(/__V__/g, assetVersion());
+      res.writeHead(200, headers);
+      res.end(html);
+      return;
+    }
+    res.writeHead(200, headers);
     res.end(buf);
   });
 }
