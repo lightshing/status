@@ -3,6 +3,11 @@
 const RANGE_ORDER = ['10min', '1h', '1d', '7d', '1m'];
 const DEFAULT_RANGE = '1d';
 const REFRESH_MS = 5000;
+const ZOOM_MS = 460;
+
+// Timestamp until which a bar zoom is playing; the periodic refresh holds off
+// rebuilding the DOM until then, so it can't snap an in-flight animation.
+let zoomEndsAt = 0;
 
 const state = {
   range: DEFAULT_RANGE,
@@ -121,11 +126,12 @@ function zoomBars() {
   if (!from || !state.data || !state.data.window) return;
   const startScale = state.data.window / from;
   if (!isFinite(startScale) || startScale <= 0 || Math.abs(startScale - 1) < 0.01) return;
+  zoomEndsAt = performance.now() + ZOOM_MS;
   for (const inner of els.list.querySelectorAll('.bar-inner')) {
     if (inner.animate) {
       inner.animate(
         [{ transform: `scaleX(${startScale})` }, { transform: 'scaleX(1)' }],
-        { duration: 460, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' }
+        { duration: ZOOM_MS, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' }
       );
     }
   }
@@ -394,4 +400,8 @@ modalForm.addEventListener('submit', async (e) => {
 buildRangeSwitch();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveRangeThumb);
 fetchData();
-setInterval(fetchData, REFRESH_MS);
+setInterval(() => {
+  // never let the periodic refresh rebuild the DOM mid-zoom, or it snaps
+  if (performance.now() < zoomEndsAt) return;
+  fetchData();
+}, REFRESH_MS);
