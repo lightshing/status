@@ -9,6 +9,7 @@ const state = {
   data: null,
   clockOffset: 0, // serverNow - clientNow, to keep counters accurate
   bucketSec: 0,
+  animateBars: false, // one-shot: scale bars in after a range switch
 };
 
 const els = {
@@ -31,21 +32,45 @@ const RANGE_LABELS = {
 
 function buildRangeSwitch() {
   els.rangeSwitch.innerHTML = '';
+  const thumb = document.createElement('span');
+  thumb.className = 'range-thumb';
+  els.rangeSwitch.appendChild(thumb);
   for (const key of RANGE_ORDER) {
     const btn = document.createElement('button');
     btn.textContent = RANGE_LABELS[key];
     btn.dataset.range = key;
     btn.setAttribute('role', 'tab');
-    if (key === state.range) btn.classList.add('active');
     btn.addEventListener('click', () => {
       if (state.range === key) return;
       state.range = key;
-      buildRangeSwitch();
+      state.animateBars = true; // re-scale the bars in on range change
+      moveRangeThumb();
       fetchData();
     });
     els.rangeSwitch.appendChild(btn);
   }
+  moveRangeThumb();
 }
+
+// Slide the pill to the active button and sync the active class.
+function moveRangeThumb() {
+  const thumb = els.rangeSwitch.querySelector('.range-thumb');
+  if (!thumb) return;
+  let active = null;
+  for (const btn of els.rangeSwitch.querySelectorAll('button')) {
+    const on = btn.dataset.range === state.range;
+    btn.classList.toggle('active', on);
+    if (on) active = btn;
+  }
+  if (!active) return;
+  const base = els.rangeSwitch.getBoundingClientRect();
+  const rect = active.getBoundingClientRect();
+  thumb.style.width = rect.width + 'px';
+  thumb.style.transform = `translateX(${rect.left - base.left}px)`;
+}
+
+// Keep the pill aligned when the top bar reflows.
+window.addEventListener('resize', moveRangeThumb);
 
 // ---- data fetching ---------------------------------------------------------
 async function fetchData() {
@@ -80,6 +105,7 @@ function render() {
   for (const svc of services) {
     els.list.appendChild(renderCard(svc));
   }
+  state.animateBars = false; // consume the one-shot range-change animation
   updateCounters();
 }
 
@@ -112,6 +138,7 @@ function renderCard(svc) {
 
   // status bar cells
   const bar = node.querySelector('.bar');
+  if (state.animateBars) bar.classList.add('animate-in');
   const frag = document.createDocumentFragment();
   let hasData = false;
   for (const b of svc.buckets) {
@@ -343,5 +370,6 @@ modalForm.addEventListener('submit', async (e) => {
 
 // ---- boot ------------------------------------------------------------------
 buildRangeSwitch();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveRangeThumb);
 fetchData();
 setInterval(fetchData, REFRESH_MS);
