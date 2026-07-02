@@ -35,6 +35,22 @@ function readCmdline(pid) {
   return '';
 }
 
+// Mask secrets in a command line before it's exposed in the UI/API. Covers
+// three shapes: --flag<sensitive> VALUE / --flag<sensitive>=VALUE, bare
+// ENV_STYLE=VALUE, and any leftover JWT-looking blob.
+const SENSITIVE =
+  'token|secret|password|passwd|pwd|api[-_]?key|access[-_]?key|private[-_]?key|client[-_]?secret|credentials?|auth[-_]?token|bearer|apikey';
+const FLAG_RE = new RegExp(`(--?[\\w.-]*(?:${SENSITIVE})[\\w.-]*)([=\\s]+)(\\S+)`, 'gi');
+const ENV_RE = new RegExp(`\\b([\\w.-]*(?:${SENSITIVE})[\\w.-]*=)(\\S+)`, 'gi');
+const JWT_RE = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?/g;
+
+function redactSecrets(cmd) {
+  return cmd
+    .replace(FLAG_RE, '$1$2***')
+    .replace(ENV_RE, '$1***')
+    .replace(JWT_RE, '***');
+}
+
 // Guess a friendly service name from a full command line, for pre-filling the
 // registration form. Prefers a project directory (…/<project>/…) over the bare
 // interpreter name (node, python3, gunicorn…).
@@ -107,7 +123,7 @@ export async function listListeningPorts() {
   const result = [];
   for (const row of byPort.values()) {
     const command = row.pid ? readCmdline(row.pid) : '';
-    const fullCommand = command || row.process || '';
+    const fullCommand = redactSecrets(command || row.process || '');
     result.push({
       port: row.port,
       addr: row.addr,
