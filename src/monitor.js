@@ -29,8 +29,11 @@ export function checkPort(port, host = '127.0.0.1') {
 }
 
 // Run a single polling round over all services, mutating their live state.
-async function pollAll(services, persist) {
-  if (services.length === 0) return;
+async function pollAll(services, persist, afterPoll) {
+  if (services.length === 0) {
+    if (afterPoll) afterPoll(services);
+    return;
+  }
   const nowSec = Math.floor(Date.now() / 1000);
   const nowMs = Date.now();
   let changed = false;
@@ -52,11 +55,18 @@ async function pollAll(services, persist) {
 
   if (changed) persist(true);
   else persist(false);
+
+  // Hand the freshly-updated services to the alert engine (transition &
+  // duration checks run on the same 10s cadence).
+  if (afterPoll) {
+    try { afterPoll(services); }
+    catch (err) { console.error('[monitor] afterPoll error:', err); }
+  }
 }
 
-export function startMonitor(getServices, persist) {
+export function startMonitor(getServices, persist, afterPoll) {
   const tick = () => {
-    pollAll(getServices(), persist).catch((err) =>
+    pollAll(getServices(), persist, afterPoll).catch((err) =>
       console.error('[monitor] poll error:', err)
     );
   };

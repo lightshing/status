@@ -11,23 +11,64 @@ import {
   deleteChecks,
   loadIgnores,
   saveIgnores,
+  loadSettings,
+  saveSettings,
+  loadRules,
+  saveRules,
 } from './store.js';
 import { RANGES, DEFAULT_RANGE } from './ranges.js';
 import { startMonitor, POLL_INTERVAL } from './monitor.js';
 import { listListeningPorts } from './ports.js';
+import { createTelegram } from './telegram.js';
+import { createNotifier } from './notify.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const PORT = 3333;
+const PORT = Number(process.env.PORT) || 3333;
 
 // ---- In-memory state (source of truth, mirrored to disk) -------------------
 let services = loadServices();
 let ignores = loadIgnores();
+let settings = loadSettings();
+let rules = loadRules();
 
 function persist(force) {
   if (force) saveServicesNow(services);
   else saveServices(services);
 }
+
+// ---- Notification wiring ---------------------------------------------------
+// Uptime over the last `windowSec` seconds for one service, from its raw log.
+function statsFor(id, windowSec) {
+  const from = Math.floor(Date.now() / 1000) - windowSec;
+  const checks = readChecks(id, from);
+  let up = 0;
+  for (const c of checks) if (c.status) up++;
+  const total = checks.length;
+  return { up, down: total - up, total, ratio: total ? up / total : null };
+}
+
+const telegram = createTelegram({
+  getConfig: () => settings.telegram,
+  getServices: () => services,
+  statsFor,
+  pollIntervalSec: POLL_INTERVAL,
+});
+
+// Route a rendered alert to every requested channel (deduped). Telegram is
+// live; SMTP is reserved (UI exists, delivery is a follow-up).
+function dispatchNotification(channels, text) {
+  const set = new Set(Array.isArray(channels) ? channels : []);
+  if (set.has('telegram') && settings.telegram.enabled) telegram.notify(text);
+  // if (set.has('smtp') && settings.smtp.enabled) sendMail(text); // TODO
+}
+
+const notifier = createNotifier({
+  getServices: () => services,
+  getIgnores: () => ignores,
+  getRules: () => rules,
+  dispatch: dispatchNotification,
+});
 
 // ---- Aggregation -----------------------------------------------------------
 function buildBuckets(id, range) {
@@ -154,6 +195,94 @@ function validateRegistration(body) {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     return { error: '端口号必须是 1-65535 之间的整数' };
   return { value: { name, port, rootDir, publicUrl } };
+}
+
+// Settings sent to the browser never include secrets — only whether one is set.
+function publicSettings(s) {
+  return {
+    telegram: {
+      enabled: !!s.telegram.enabled,
+      chatId: s.telegram.chatId || '',
+      tokenSet: !!s.telegram.token,
+    },
+    smtp: {
+      enabled: !!s.smtp.enabled,
+      host: s.smtp.host || '',
+      port: s.smtp.port ?? 465,
+      secure: s.smtp.secure !== false,
+      username: s.smtp.username || '',
+      from: s.smtp.from || '',
+      recipients: Array.isArray(s.smtp.recipients) ? s.smtp.recipients : [],
+      passwordSet: !!s.smtp.password,
+    },
+  };
+}
+
+// Merge an incoming settings patch. A blank/absent secret keeps the stored one;
+// the literal sentinel '' with the *Clear flag wipes it.
+function applySettingsPatch(current, body) {
+  const next = JSON.parse(JSON.stringify(current));
+  const tg = body.telegram || {};
+  if (typeof tg.enabled === 'boolean') next.telegram.enabled = tg.enabled;
+  if (typeof tg.chatId === 'string') next.telegram.chatId = tg.chatId.trim();
+  if (typeof tg.token === 'string' && tg.token.trim()) next.telegram.token = tg.token.trim();
+  if (tg.clearToken === true) next.telegram.token = '';
+
+  const sm = body.smtp || {};
+  if (typeof sm.enabled === 'boolean') next.smtp.enabled = sm.enabled;
+  if (typeof sm.host === 'string') next.smtp.host = sm.host.trim();
+  if (sm.port !== undefined && Number.isInteger(Number(sm.port))) next.smtp.port = Number(sm.port);
+  if (typeof sm.secure === 'boolean') next.smtp.secure = sm.secure;
+  if (typeof sm.username === 'string') next.smtp.username = sm.username.trim();
+  if (typeof sm.from === 'string') next.smtp.from = sm.from.trim();
+  if (Array.isArray(sm.recipients))
+    next.smtp.recipients = sm.recipients.map((r) => String(r).trim()).filter(Boolean);
+  if (typeof sm.password === 'string' && sm.password) next.smtp.password = sm.password;
+  if (sm.clearPassword === true) next.smtp.password = '';
+  return next;
+}
+
+const RULE_TYPES = ['status_change', 'duration', 'new_port'];
+const CHANNELS = ['telegram', 'smtp'];
+
+// Validate + normalise a rule payload against the current service list.
+function validateRule(body) {
+  const type = String(body.type || '');
+  if (!RULE_TYPES.includes(type)) return { error: '未知的告警类型' };
+
+  const channels = Array.isArray(body.channels)
+    ? body.channels.filter((c) => CHANNELS.includes(c))
+    : [];
+  if (!channels.length) return { error: '请至少选择一种推送方式' };
+
+  const enabled = body.enabled !== false;
+  const name = String(body.name ?? '').trim();
+  const out = { type, enabled, name, channels };
+
+  if (type === 'new_port') return { value: out };
+
+  // status_change & duration share scope/serviceIds.
+  const scope = body.scope === 'selected' ? 'selected' : 'all';
+  const validIds = new Set(services.map((s) => s.id));
+  const serviceIds = Array.isArray(body.serviceIds)
+    ? body.serviceIds.filter((id) => validIds.has(id))
+    : [];
+  if (scope === 'selected' && !serviceIds.length)
+    return { error: '请至少选择一个端口，或改为「所有端口」' };
+  out.scope = scope;
+  out.serviceIds = serviceIds;
+
+  if (type === 'status_change') {
+    const dir = body.direction;
+    out.direction = ['both', 'up', 'down'].includes(dir) ? dir : 'both';
+  } else if (type === 'duration') {
+    out.state = body.state === 'up' ? 'up' : 'down';
+    const seconds = Number(body.seconds);
+    if (!Number.isFinite(seconds) || seconds <= 0)
+      return { error: '持续时长必须是正数（秒）' };
+    out.seconds = Math.floor(seconds);
+  }
+  return { value: out };
 }
 
 // ---- Router ----------------------------------------------------------------
@@ -305,6 +434,87 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { service: publicService(svc) });
     }
 
+    // GET /api/settings — channel config, secrets masked.
+    if (pathName === '/api/settings' && req.method === 'GET') {
+      return sendJson(res, 200, { settings: publicSettings(settings) });
+    }
+
+    // PUT /api/settings — update channel config (blank secret keeps existing).
+    if (pathName === '/api/settings' && req.method === 'PUT') {
+      const raw = await readBody(req);
+      let body;
+      try { body = JSON.parse(raw || '{}'); }
+      catch { return sendJson(res, 400, { error: '无效的 JSON' }); }
+      settings = applySettingsPatch(settings, body);
+      saveSettings(settings);
+      return sendJson(res, 200, { settings: publicSettings(settings) });
+    }
+
+    // POST /api/settings/telegram/test — send a test message. Accepts optional
+    // token/chatId in the body so it works before saving.
+    if (pathName === '/api/settings/telegram/test' && req.method === 'POST') {
+      const raw = await readBody(req);
+      let body;
+      try { body = JSON.parse(raw || '{}'); }
+      catch { return sendJson(res, 400, { error: '无效的 JSON' }); }
+      const token = (body.token && String(body.token).trim()) || settings.telegram.token;
+      const chatId = (body.chatId && String(body.chatId).trim()) || settings.telegram.chatId;
+      if (!token) return sendJson(res, 400, { error: '缺少 Bot Token' });
+      if (!chatId) return sendJson(res, 400, { error: '缺少 Chat ID' });
+      const r = await telegram.send('✅ 端口健康监测 · 测试消息发送成功。', {
+        force: true, token, chatId,
+      });
+      if (r && r.ok) return sendJson(res, 200, { ok: true });
+      return sendJson(res, 502, { error: 'Telegram 返回：' + (r?.description || '发送失败') });
+    }
+
+    // GET /api/rules — all alert rules.
+    if (pathName === '/api/rules' && req.method === 'GET') {
+      return sendJson(res, 200, { rules });
+    }
+
+    // POST /api/rules — create a rule.
+    if (pathName === '/api/rules' && req.method === 'POST') {
+      const raw = await readBody(req);
+      let body;
+      try { body = JSON.parse(raw || '{}'); }
+      catch { return sendJson(res, 400, { error: '无效的 JSON' }); }
+      const { error, value } = validateRule(body);
+      if (error) return sendJson(res, 400, { error });
+      const rule = { id: newId(), ...value, createdAt: Date.now() };
+      rules.push(rule);
+      saveRules(rules);
+      return sendJson(res, 201, { rule });
+    }
+
+    // PUT /api/rules/:id — update a rule.
+    const rulePut = pathName.match(/^\/api\/rules\/([a-f0-9]+)$/);
+    if (rulePut && req.method === 'PUT') {
+      const id = rulePut[1];
+      const rule = rules.find((r) => r.id === id);
+      if (!rule) return sendJson(res, 404, { error: '规则不存在' });
+      const raw = await readBody(req);
+      let body;
+      try { body = JSON.parse(raw || '{}'); }
+      catch { return sendJson(res, 400, { error: '无效的 JSON' }); }
+      const { error, value } = validateRule(body);
+      if (error) return sendJson(res, 400, { error });
+      Object.assign(rule, value);
+      saveRules(rules);
+      return sendJson(res, 200, { rule });
+    }
+
+    // DELETE /api/rules/:id — remove a rule.
+    const ruleDel = pathName.match(/^\/api\/rules\/([a-f0-9]+)$/);
+    if (ruleDel && req.method === 'DELETE') {
+      const id = ruleDel[1];
+      const idx = rules.findIndex((r) => r.id === id);
+      if (idx === -1) return sendJson(res, 404, { error: '规则不存在' });
+      rules.splice(idx, 1);
+      saveRules(rules);
+      return sendJson(res, 200, { ok: true });
+    }
+
     if (pathName.startsWith('/api/')) {
       return sendJson(res, 404, { error: 'Not found' });
     }
@@ -317,9 +527,12 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-startMonitor(() => services, persist);
+startMonitor(() => services, persist, (svcs) => notifier.onPoll(svcs));
+notifier.start();
+telegram.start();
 
 server.listen(PORT, () => {
   console.log(`Port Health Monitor running at http://localhost:${PORT}`);
   console.log(`Polling every ${POLL_INTERVAL}s. ${services.length} service(s) registered.`);
+  console.log(`Alert rules: ${rules.length}. Telegram bot: ${settings.telegram.enabled ? 'on' : 'off'}.`);
 });

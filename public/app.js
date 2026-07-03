@@ -641,6 +641,422 @@ for (const th of portsModal.querySelectorAll('th.sortable')) {
   });
 }
 
+// ============================================================================
+//  通知 / 设置 抽屉
+// ============================================================================
+
+// ---- generic drawer open/close (slide-in with backdrop fade) ----------------
+function openDrawer(backdrop, toolBtn) {
+  backdrop.hidden = false;
+  void backdrop.offsetWidth; // reflow so the transition plays
+  backdrop.classList.add('open');
+  if (toolBtn) toolBtn.classList.add('active');
+}
+function closeDrawer(backdrop, toolBtn) {
+  backdrop.classList.remove('open');
+  if (toolBtn) toolBtn.classList.remove('active');
+  setTimeout(() => { backdrop.hidden = true; }, 280);
+}
+
+const notifyDrawer = document.getElementById('notifyDrawer');
+const settingsDrawer = document.getElementById('settingsDrawer');
+const notifyBtn = document.getElementById('notifyBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+
+notifyBtn.addEventListener('click', () => { openDrawer(notifyDrawer, notifyBtn); loadRules(); });
+settingsBtn.addEventListener('click', () => { openDrawer(settingsDrawer, settingsBtn); loadSettings(); });
+document.getElementById('notifyDrawerClose').addEventListener('click', () => closeDrawer(notifyDrawer, notifyBtn));
+document.getElementById('settingsDrawerClose').addEventListener('click', () => closeDrawer(settingsDrawer, settingsBtn));
+notifyDrawer.addEventListener('click', (e) => { if (e.target === notifyDrawer) closeDrawer(notifyDrawer, notifyBtn); });
+settingsDrawer.addEventListener('click', (e) => { if (e.target === settingsDrawer) closeDrawer(settingsDrawer, settingsBtn); });
+
+// Escape closes (topmost first): rule modal → open drawer.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!ruleModal.hidden) { closeRuleModal(); return; }
+  if (notifyDrawer.classList.contains('open')) { closeDrawer(notifyDrawer, notifyBtn); return; }
+  if (settingsDrawer.classList.contains('open')) { closeDrawer(settingsDrawer, settingsBtn); return; }
+});
+
+// ---- settings (Telegram / SMTP) --------------------------------------------
+const tgEnabled = document.getElementById('tgEnabled');
+const tgToken = document.getElementById('tgToken');
+const tgChatId = document.getElementById('tgChatId');
+const tgTokenHint = document.getElementById('tgTokenHint');
+const tgError = document.getElementById('tgError');
+let tgTokenSet = false;
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) throw new Error('bad response');
+    const { settings } = await res.json();
+    const tg = settings.telegram || {};
+    tgEnabled.checked = !!tg.enabled;
+    tgChatId.value = tg.chatId || '';
+    tgToken.value = '';
+    tgTokenSet = !!tg.tokenSet;
+    tgTokenHint.textContent = tgTokenSet
+      ? '已保存 Token · 如需更换请输入新的'
+      : '在 Telegram 找 @BotFather 创建机器人获取';
+    tgError.textContent = '';
+  } catch (err) {
+    console.error('load settings failed', err);
+  }
+}
+
+async function saveSettings() {
+  tgError.textContent = '';
+  const typedToken = tgToken.value.trim();
+  const chatId = tgChatId.value.trim();
+  if (tgEnabled.checked && !tgTokenSet && !typedToken) {
+    tgError.textContent = '请先填写 Bot Token';
+    return;
+  }
+  if (tgEnabled.checked && !chatId) {
+    tgError.textContent = '请先填写 Chat ID';
+    return;
+  }
+  const telegram = { enabled: tgEnabled.checked, chatId };
+  if (typedToken) telegram.token = typedToken;
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegram }),
+    });
+    const json = await res.json();
+    if (!res.ok) { tgError.textContent = json.error || '保存失败'; return; }
+    await loadSettings();
+    showToast('设置已保存');
+    refreshNotifyBadge();
+  } catch {
+    tgError.textContent = '网络错误，请重试';
+  }
+}
+
+async function testTelegram() {
+  tgError.textContent = '';
+  const typedToken = tgToken.value.trim();
+  const chatId = tgChatId.value.trim();
+  if (!tgTokenSet && !typedToken) { tgError.textContent = '请先填写 Bot Token'; return; }
+  if (!chatId) { tgError.textContent = '请先填写 Chat ID'; return; }
+  const body = { chatId };
+  if (typedToken) body.token = typedToken;
+  const btn = document.getElementById('tgTestBtn');
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = '发送中…';
+  try {
+    const res = await fetch('/api/settings/telegram/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (res.ok) showToast('测试消息已发送 ✓');
+    else tgError.textContent = json.error || '发送失败';
+  } catch {
+    tgError.textContent = '网络错误，请重试';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+document.getElementById('tgSaveBtn').addEventListener('click', saveSettings);
+document.getElementById('tgTestBtn').addEventListener('click', testTelegram);
+
+// ---- alert rules ------------------------------------------------------------
+const RULE_META = {
+  status_change: { icon: '⚡', label: '端口状态变更' },
+  duration: { icon: '⏱', label: '状态持续时长' },
+  new_port: { icon: '🆕', label: '新占用端口' },
+};
+const RULE_TYPE_HINT = {
+  status_change: '10 秒探测发现端口变为可用 / 不可用时立即推送。',
+  duration: '端口在某状态持续超过设定时长后推送一次。',
+  new_port: '端口速查每 20 秒扫描，发现既未注册也未忽略的新占用端口时推送。',
+};
+
+let rulesCache = [];
+
+function svcName(id) {
+  const svc = (state.data ? state.data.services : []).find((s) => s.id === id);
+  return svc ? svc.name : '(已删除)';
+}
+
+function fmtSecs(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  if (sec % 86400 === 0 && sec >= 86400) return sec / 86400 + ' 天';
+  if (sec % 3600 === 0 && sec >= 3600) return sec / 3600 + ' 小时';
+  if (sec % 60 === 0 && sec >= 60) return sec / 60 + ' 分钟';
+  return sec + ' 秒';
+}
+
+function ruleScopeText(rule) {
+  if (rule.scope === 'all') return '所有端口';
+  const ids = rule.serviceIds || [];
+  if (!ids.length) return '未指定端口';
+  if (ids.length <= 2) return ids.map(svcName).join('、');
+  return `${svcName(ids[0])} 等 ${ids.length} 个端口`;
+}
+
+function ruleDesc(rule) {
+  if (rule.type === 'status_change') {
+    const dir = { both: '变为可用或不可用', up: '仅变为可用', down: '仅变为不可用' }[rule.direction || 'both'];
+    return `${ruleScopeText(rule)} · ${dir}`;
+  }
+  if (rule.type === 'duration') {
+    const st = rule.state === 'up' ? '可用' : '不可用';
+    return `${ruleScopeText(rule)} · ${st}持续超过 ${fmtSecs(rule.seconds)}`;
+  }
+  return '发现未注册且未忽略的新占用端口';
+}
+
+const CHANNEL_LABEL = { telegram: 'Telegram', smtp: 'SMTP 邮件' };
+
+function renderRules() {
+  const list = document.getElementById('ruleList');
+  const empty = document.getElementById('ruleEmpty');
+  list.innerHTML = '';
+  empty.hidden = rulesCache.length !== 0;
+  for (const rule of rulesCache) {
+    const card = document.createElement('div');
+    card.className = 'rule-card' + (rule.enabled ? '' : ' disabled');
+    const meta = RULE_META[rule.type] || { icon: '•', label: rule.type };
+
+    const chips = (rule.channels || [])
+      .map((c) => `<span class="rule-chip ch">${escapeHtml(CHANNEL_LABEL[c] || c)}</span>`)
+      .join('');
+
+    card.innerHTML =
+      `<span class="rule-ic ${rule.type}">${meta.icon}</span>` +
+      `<div class="rule-main">` +
+      `<div class="rule-name">${escapeHtml(rule.name || meta.label)}</div>` +
+      `<div class="rule-desc">${escapeHtml(ruleDesc(rule))}</div>` +
+      `<div class="rule-chips">${chips}</div>` +
+      `</div>` +
+      `<div class="rule-actions">` +
+      `<label class="switch"><input type="checkbox" ${rule.enabled ? 'checked' : ''}><span class="switch-slider"></span></label>` +
+      `<button class="icon-link edit-rule" title="编辑">✎</button>` +
+      `<button class="icon-btn del-rule" title="删除">✕</button>` +
+      `</div>`;
+
+    card.querySelector('.switch input').addEventListener('change', (e) =>
+      toggleRule(rule, e.target.checked)
+    );
+    card.querySelector('.edit-rule').addEventListener('click', () => openRuleModal(rule));
+    card.querySelector('.del-rule').addEventListener('click', () => deleteRule(rule));
+    list.appendChild(card);
+  }
+}
+
+function refreshNotifyBadge() {
+  const badge = document.getElementById('notifyBadge');
+  const n = rulesCache.filter((r) => r.enabled).length;
+  badge.textContent = n;
+  badge.hidden = n === 0;
+}
+
+async function loadRules() {
+  try {
+    const res = await fetch('/api/rules');
+    if (!res.ok) throw new Error('bad response');
+    const json = await res.json();
+    rulesCache = Array.isArray(json.rules) ? json.rules : [];
+  } catch (err) {
+    console.error('load rules failed', err);
+    rulesCache = [];
+  }
+  renderRules();
+  refreshNotifyBadge();
+}
+
+async function toggleRule(rule, enabled) {
+  try {
+    const res = await fetch('/api/rules/' + rule.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...ruleToBody(rule), enabled }),
+    });
+    if (!res.ok) throw new Error('bad');
+    rule.enabled = enabled;
+  } catch {
+    showToast('操作失败，请重试');
+  }
+  await loadRules();
+}
+
+async function deleteRule(rule) {
+  if (!confirm(`删除告警「${rule.name || RULE_META[rule.type].label}」？`)) return;
+  try {
+    await fetch('/api/rules/' + rule.id, { method: 'DELETE' });
+  } catch { showToast('删除失败'); }
+  await loadRules();
+}
+
+// The full body a PUT expects (so a toggle re-sends a valid rule).
+function ruleToBody(rule) {
+  const b = { type: rule.type, enabled: rule.enabled, name: rule.name || '', channels: rule.channels || [] };
+  if (rule.type !== 'new_port') {
+    b.scope = rule.scope;
+    b.serviceIds = rule.serviceIds || [];
+  }
+  if (rule.type === 'status_change') b.direction = rule.direction || 'both';
+  if (rule.type === 'duration') { b.state = rule.state; b.seconds = rule.seconds; }
+  return b;
+}
+
+// ---- rule editor modal ------------------------------------------------------
+const ruleModal = document.getElementById('ruleModal');
+const ruleForm = document.getElementById('ruleForm');
+const ruleError = document.getElementById('ruleError');
+const ruleServices = document.getElementById('ruleServices');
+let editingRuleId = null;
+const draft = { type: 'status_change', direction: 'both', state: 'down', scope: 'all', seconds: '', serviceIds: new Set() };
+
+function setSeg(groupId, attr, value) {
+  for (const b of document.getElementById(groupId).querySelectorAll('.seg')) {
+    b.classList.toggle('active', b.dataset[attr] === value);
+  }
+}
+
+function applyRuleVisibility() {
+  for (const el of ruleForm.querySelectorAll('.rule-when, .rule-scope')) {
+    const types = (el.dataset.for || '').split(/\s+/);
+    el.hidden = !types.includes(draft.type);
+  }
+  document.getElementById('ruleTypeHint').textContent = RULE_TYPE_HINT[draft.type] || '';
+  ruleServices.hidden = draft.scope !== 'selected';
+}
+
+function buildServiceChecklist() {
+  const services = state.data ? state.data.services : [];
+  ruleServices.innerHTML = '';
+  if (!services.length) {
+    ruleServices.innerHTML = '<div class="svc-opt" style="cursor:default;color:var(--faint)">暂无已注册端口</div>';
+    return;
+  }
+  for (const svc of services) {
+    const row = document.createElement('label');
+    row.className = 'svc-opt';
+    const cls = svc.status === 1 ? 'up' : svc.status === 0 ? 'down' : '';
+    row.innerHTML =
+      `<input type="checkbox" value="${svc.id}" ${draft.serviceIds.has(svc.id) ? 'checked' : ''}>` +
+      `<span class="svc-opt-dot ${cls}"></span>` +
+      `<span class="svc-opt-name">${escapeHtml(svc.name)}</span>` +
+      `<span class="svc-opt-port">:${svc.port}</span>`;
+    row.querySelector('input').addEventListener('change', (e) => {
+      if (e.target.checked) draft.serviceIds.add(svc.id);
+      else draft.serviceIds.delete(svc.id);
+    });
+    ruleServices.appendChild(row);
+  }
+}
+
+function openRuleModal(rule) {
+  editingRuleId = rule ? rule.id : null;
+  ruleError.textContent = '';
+  document.getElementById('ruleModalTitle').textContent = rule ? '编辑告警' : '添加告警';
+
+  draft.type = rule ? rule.type : 'status_change';
+  draft.direction = rule && rule.direction ? rule.direction : 'both';
+  draft.state = rule && rule.state ? rule.state : 'down';
+  draft.scope = rule && rule.scope ? rule.scope : 'all';
+  draft.seconds = rule && rule.seconds ? rule.seconds : '';
+  draft.serviceIds = new Set(rule && rule.serviceIds ? rule.serviceIds : []);
+
+  setSeg('ruleTypeGroup', 'type', draft.type);
+  setSeg('ruleDirGroup', 'dir', draft.direction);
+  setSeg('ruleStateGroup', 'state', draft.state);
+  setSeg('ruleScopeGroup', 'scope', draft.scope);
+  document.getElementById('ruleSeconds').value = draft.seconds || '';
+
+  const channels = new Set(rule ? rule.channels || [] : ['telegram']);
+  for (const cb of document.getElementById('ruleChannels').querySelectorAll('input')) {
+    cb.checked = channels.has(cb.value);
+  }
+
+  buildServiceChecklist();
+  applyRuleVisibility();
+  ruleModal.hidden = false;
+}
+
+function closeRuleModal() {
+  ruleModal.hidden = true;
+  editingRuleId = null;
+}
+
+// segmented-control wiring
+document.getElementById('ruleTypeGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('.seg'); if (!b) return;
+  draft.type = b.dataset.type; setSeg('ruleTypeGroup', 'type', draft.type); applyRuleVisibility();
+});
+document.getElementById('ruleDirGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('.seg'); if (!b) return;
+  draft.direction = b.dataset.dir; setSeg('ruleDirGroup', 'dir', draft.direction);
+});
+document.getElementById('ruleStateGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('.seg'); if (!b) return;
+  draft.state = b.dataset.state; setSeg('ruleStateGroup', 'state', draft.state);
+});
+document.getElementById('ruleScopeGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('.seg'); if (!b) return;
+  draft.scope = b.dataset.scope; setSeg('ruleScopeGroup', 'scope', draft.scope);
+  ruleServices.hidden = draft.scope !== 'selected';
+});
+document.getElementById('durPresets').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.getElementById('ruleSeconds').value = b.dataset.sec;
+});
+
+document.getElementById('addRuleBtn').addEventListener('click', () => openRuleModal(null));
+document.getElementById('ruleModalClose').addEventListener('click', closeRuleModal);
+document.getElementById('ruleCancel').addEventListener('click', closeRuleModal);
+ruleModal.addEventListener('click', (e) => { if (e.target === ruleModal) closeRuleModal(); });
+
+ruleForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  ruleError.textContent = '';
+  const channels = [...document.getElementById('ruleChannels').querySelectorAll('input:checked')].map((c) => c.value);
+  const body = { type: draft.type, enabled: true, name: '', channels };
+  if (draft.type !== 'new_port') {
+    body.scope = draft.scope;
+    body.serviceIds = [...draft.serviceIds];
+  }
+  if (draft.type === 'status_change') body.direction = draft.direction;
+  if (draft.type === 'duration') {
+    body.state = draft.state;
+    body.seconds = Number(document.getElementById('ruleSeconds').value);
+  }
+  // keep the enabled flag when editing an existing rule
+  if (editingRuleId) {
+    const existing = rulesCache.find((r) => r.id === editingRuleId);
+    if (existing) body.enabled = existing.enabled;
+  }
+
+  const url = editingRuleId ? '/api/rules/' + editingRuleId : '/api/rules';
+  const method = editingRuleId ? 'PUT' : 'POST';
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    if (!res.ok) { ruleError.textContent = json.error || '保存失败'; return; }
+    closeRuleModal();
+    await loadRules();
+    showToast(editingRuleId ? '告警已更新' : '告警已添加');
+  } catch {
+    ruleError.textContent = '网络错误，请重试';
+  }
+});
+
+// keep the bell badge current across the session
+loadRules();
+
 // ---- boot ------------------------------------------------------------------
 buildRangeSwitch();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveRangeThumb);

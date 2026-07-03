@@ -15,8 +15,25 @@
       <button class="btn primary add-btn" id="addBtn"><span class="plus">+</span> 注册服务</button>
       <button class="btn ghost add-btn" id="portsBtn"><span class="scan-ic">🔎</span> 端口速查</button>
     </div>
-    <div class="range-switch" id="rangeSwitch" role="tablist" aria-label="时间范围">
-      <!-- range buttons injected here -->
+    <div class="topbar-right">
+      <div class="topbar-tools">
+        <button class="tool-btn" id="notifyBtn" title="通知" aria-label="通知">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+          </svg>
+          <span class="tool-badge" id="notifyBadge" hidden></span>
+        </button>
+        <button class="tool-btn" id="settingsBtn" title="设置" aria-label="设置">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
+      <div class="range-switch" id="rangeSwitch" role="tablist" aria-label="时间范围">
+        <!-- range buttons injected here -->
+      </div>
     </div>
   </header>
 
@@ -138,6 +155,186 @@
           <span class="form-error" id="ignoreError"></span>
           <button type="button" class="btn ghost" id="ignoreCancel">取消</button>
           <button type="submit" class="btn primary" id="ignoreSubmit">忽略</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== 通知抽屉 ==================== -->
+  <div class="drawer-backdrop" id="notifyDrawer" hidden>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="notifyDrawerTitle">
+      <div class="drawer-head">
+        <div class="drawer-title-wrap">
+          <h2 id="notifyDrawerTitle">通知</h2>
+          <p class="drawer-sub">配置告警事件，命中后推送到已开启的通道</p>
+        </div>
+        <button class="icon-btn drawer-close" id="notifyDrawerClose" title="关闭">✕</button>
+      </div>
+      <div class="drawer-body">
+        <button class="btn primary block-btn" id="addRuleBtn"><span class="plus">+</span> 添加告警</button>
+        <div class="rule-list" id="ruleList"></div>
+        <p class="drawer-empty" id="ruleEmpty" hidden>还没有告警规则，点击上方「添加告警」创建第一条。</p>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ==================== 设置抽屉 ==================== -->
+  <div class="drawer-backdrop" id="settingsDrawer" hidden>
+    <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="settingsDrawerTitle">
+      <div class="drawer-head">
+        <div class="drawer-title-wrap">
+          <h2 id="settingsDrawerTitle">设置</h2>
+          <p class="drawer-sub">配置通知通道</p>
+        </div>
+        <button class="icon-btn drawer-close" id="settingsDrawerClose" title="关闭">✕</button>
+      </div>
+      <div class="drawer-body">
+        <!-- Telegram -->
+        <section class="settings-card">
+          <div class="settings-card-head">
+            <div class="settings-card-title">
+              <span class="channel-ic tg" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.94 4.6 18.6 20.3c-.25 1.1-.9 1.38-1.83.86l-5.06-3.73-2.44 2.35c-.27.27-.5.5-1.02.5l.36-5.14L16.98 7.4c.4-.36-.09-.56-.63-.2L6.79 13.4l-4.98-1.56c-1.08-.34-1.1-1.08.23-1.6L20.5 3.03c.9-.33 1.69.2 1.44 1.57Z"/></svg>
+              </span>
+              <div>
+                <h3>Telegram Bot</h3>
+                <p class="settings-card-sub">推送告警，并支持在对话内查询端口状态</p>
+              </div>
+            </div>
+            <label class="switch" title="开启 / 关闭">
+              <input type="checkbox" id="tgEnabled" />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+          <div class="settings-fields">
+            <div class="field">
+              <label for="tgToken">Bot Token</label>
+              <input id="tgToken" type="password" autocomplete="off" placeholder="123456:ABC-DEF..." />
+              <span class="field-hint" id="tgTokenHint">在 Telegram 找 @BotFather 创建机器人获取</span>
+            </div>
+            <div class="field">
+              <label for="tgChatId">Chat ID（User ID）</label>
+              <input id="tgChatId" type="text" autocomplete="off" placeholder="例如 123456789" />
+              <span class="field-hint">先给你的 Bot 发一句话，再向它发送 <code>/id</code> 即可获取</span>
+            </div>
+            <div class="settings-actions">
+              <span class="form-error" id="tgError"></span>
+              <button type="button" class="btn ghost small" id="tgTestBtn">发送测试消息</button>
+              <button type="button" class="btn primary small" id="tgSaveBtn">保存</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- SMTP (预留) -->
+        <section class="settings-card is-soon">
+          <div class="settings-card-head">
+            <div class="settings-card-title">
+              <span class="channel-ic mail" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+              </span>
+              <div>
+                <h3>SMTP 邮件 <span class="soon-badge">即将推出</span></h3>
+                <p class="settings-card-sub">通过邮箱接收告警，支持多个收件人</p>
+              </div>
+            </div>
+            <label class="switch" title="即将推出">
+              <input type="checkbox" id="smtpEnabled" disabled />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+          <div class="settings-fields settings-disabled">
+            <div class="field-row">
+              <div class="field"><label>SMTP 服务器</label><input type="text" placeholder="smtp.example.com" disabled /></div>
+              <div class="field field-narrow"><label>端口</label><input type="text" placeholder="465" disabled /></div>
+            </div>
+            <div class="field"><label>用户名</label><input type="text" placeholder="you@example.com" disabled /></div>
+            <div class="field"><label>密码 / 授权码</label><input type="password" placeholder="••••••" disabled /></div>
+            <div class="field"><label>收件人（可多个）</label><input type="text" placeholder="a@x.com, b@y.com" disabled /></div>
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ==================== 告警规则编辑 ==================== -->
+  <div class="modal-backdrop" id="ruleModal" hidden>
+    <div class="modal rule-modal" role="dialog" aria-modal="true" aria-labelledby="ruleModalTitle">
+      <div class="modal-head">
+        <h2 id="ruleModalTitle">添加告警</h2>
+        <button class="icon-btn" id="ruleModalClose" title="关闭">✕</button>
+      </div>
+      <form class="modal-form rule-form" id="ruleForm">
+        <div class="field">
+          <label>告警类型</label>
+          <div class="seg-group" id="ruleTypeGroup" role="tablist">
+            <button type="button" class="seg" data-type="status_change">状态变更</button>
+            <button type="button" class="seg" data-type="duration">持续时长</button>
+            <button type="button" class="seg" data-type="new_port">新占用端口</button>
+          </div>
+          <span class="field-hint" id="ruleTypeHint"></span>
+        </div>
+
+        <!-- 方向（仅状态变更） -->
+        <div class="field rule-when" data-for="status_change">
+          <label>触发方向</label>
+          <div class="seg-group" id="ruleDirGroup">
+            <button type="button" class="seg" data-dir="both">变为可用或不可用</button>
+            <button type="button" class="seg" data-dir="up">仅变为可用</button>
+            <button type="button" class="seg" data-dir="down">仅变为不可用</button>
+          </div>
+        </div>
+
+        <!-- 状态 + 时长（仅持续时长） -->
+        <div class="field rule-when" data-for="duration">
+          <label>状态与持续时长</label>
+          <div class="dur-row">
+            <div class="seg-group" id="ruleStateGroup">
+              <button type="button" class="seg" data-state="down">不可用</button>
+              <button type="button" class="seg" data-state="up">可用</button>
+            </div>
+            <div class="dur-input">
+              <input id="ruleSeconds" type="number" min="1" step="1" placeholder="300" />
+              <span class="dur-unit">秒</span>
+            </div>
+          </div>
+          <div class="dur-presets" id="durPresets">
+            <button type="button" data-sec="60">1 分钟</button>
+            <button type="button" data-sec="300">5 分钟</button>
+            <button type="button" data-sec="600">10 分钟</button>
+            <button type="button" data-sec="1800">30 分钟</button>
+            <button type="button" data-sec="3600">1 小时</button>
+          </div>
+        </div>
+
+        <!-- 关联端口（状态变更 / 持续时长） -->
+        <div class="field rule-scope" data-for="status_change duration">
+          <label>关联端口</label>
+          <div class="seg-group" id="ruleScopeGroup">
+            <button type="button" class="seg" data-scope="all">所有端口</button>
+            <button type="button" class="seg" data-scope="selected">指定端口</button>
+          </div>
+          <div class="svc-checklist" id="ruleServices" hidden></div>
+        </div>
+
+        <!-- 推送方式 -->
+        <div class="field">
+          <label>推送方式（可多选）</label>
+          <div class="channel-picker" id="ruleChannels">
+            <label class="channel-opt">
+              <input type="checkbox" value="telegram" />
+              <span class="channel-opt-body"><span class="dot-tg"></span> Telegram Bot</span>
+            </label>
+            <label class="channel-opt is-disabled" title="即将推出">
+              <input type="checkbox" value="smtp" disabled />
+              <span class="channel-opt-body"><span class="dot-mail"></span> SMTP 邮件 <span class="soon-badge">即将推出</span></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <span class="form-error" id="ruleError"></span>
+          <button type="button" class="btn ghost" id="ruleCancel">取消</button>
+          <button type="submit" class="btn primary" id="ruleSubmit">保存</button>
         </div>
       </form>
     </div>

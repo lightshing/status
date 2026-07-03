@@ -15,10 +15,15 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '..', 'data');
+// DATA_DIR defaults to <repo>/data; PHM_DATA_DIR overrides it (used for tests).
+const DATA_DIR = process.env.PHM_DATA_DIR
+  ? path.resolve(process.env.PHM_DATA_DIR)
+  : path.join(__dirname, '..', 'data');
 const CHECKS_DIR = path.join(DATA_DIR, 'checks');
 const SERVICES_FILE = path.join(DATA_DIR, 'services.json');
 const IGNORES_FILE = path.join(DATA_DIR, 'ignores.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const RULES_FILE = path.join(DATA_DIR, 'rules.json');
 
 const RECORD_SIZE = 5;
 
@@ -82,6 +87,67 @@ export function saveIgnores(ignores) {
   const tmp = IGNORES_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify({ ignores }, null, 2));
   fs.renameSync(tmp, IGNORES_FILE);
+}
+
+// ---- Notification settings (channels) --------------------------------------
+// Delivery-channel configuration lives in data/settings.json:
+//   { telegram: { enabled, token, chatId },
+//     smtp:     { enabled, host, port, secure, username, password, from, recipients:[] } }
+// The token / password are secrets — the HTTP layer never echoes them back to
+// the browser, only a boolean "set" flag.
+const DEFAULT_SETTINGS = {
+  telegram: { enabled: false, token: '', chatId: '' },
+  smtp: {
+    enabled: false,
+    host: '',
+    port: 465,
+    secure: true,
+    username: '',
+    password: '',
+    from: '',
+    recipients: [],
+  },
+};
+
+export function loadSettings() {
+  ensureDirs();
+  try {
+    const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return {
+      telegram: { ...DEFAULT_SETTINGS.telegram, ...(parsed.telegram || {}) },
+      smtp: { ...DEFAULT_SETTINGS.smtp, ...(parsed.smtp || {}) },
+    };
+  } catch {
+    return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+  }
+}
+
+export function saveSettings(settings) {
+  ensureDirs();
+  const tmp = SETTINGS_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(settings, null, 2));
+  fs.renameSync(tmp, SETTINGS_FILE);
+}
+
+// ---- Alert rules -----------------------------------------------------------
+// data/rules.json: { rules: [ { id, type, enabled, ...typeFields, channels:[] } ] }
+export function loadRules() {
+  ensureDirs();
+  try {
+    const raw = fs.readFileSync(RULES_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.rules) ? parsed.rules : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveRules(rules) {
+  ensureDirs();
+  const tmp = RULES_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify({ rules }, null, 2));
+  fs.renameSync(tmp, RULES_FILE);
 }
 
 function checkFile(id) {
