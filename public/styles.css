@@ -897,6 +897,11 @@ body {
 .svc-opt .svc-opt-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--unknown); }
 .svc-opt .svc-opt-dot.up { background: var(--up); }
 .svc-opt .svc-opt-dot.down { background: var(--down); }
+/* "所有端口" mode: list stays visible but reads as fully included & locked */
+.svc-checklist.all-selected { opacity: 0.65; }
+.svc-checklist.all-selected .svc-opt { cursor: default; }
+.svc-checklist.all-selected .svc-opt:hover { background: transparent; }
+.svc-opt input:disabled { cursor: default; }
 
 /* channel picker */
 .channel-picker { display: flex; flex-direction: column; gap: 8px; }

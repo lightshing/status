@@ -928,7 +928,26 @@ function applyRuleVisibility() {
     el.hidden = !types.includes(draft.type);
   }
   document.getElementById('ruleTypeHint').textContent = RULE_TYPE_HINT[draft.type] || '';
-  ruleServices.hidden = draft.scope !== 'selected';
+  refreshChecklistMode();
+}
+
+// "所有端口" keeps the list visible (no collapse) but locks it as fully
+// included — every row checked and disabled. "指定端口" makes it interactive,
+// reflecting the user's picks. draft.serviceIds is never touched here, so
+// toggling back and forth preserves a specific selection.
+function refreshChecklistMode() {
+  const all = draft.scope === 'all';
+  ruleServices.classList.toggle('all-selected', all);
+  for (const cb of ruleServices.querySelectorAll('input[type="checkbox"]')) {
+    cb.disabled = all;
+    cb.checked = all ? true : draft.serviceIds.has(cb.value);
+  }
+  const hint = document.getElementById('ruleScopeHint');
+  if (hint) {
+    hint.textContent = all
+      ? '已包含全部端口（含日后新注册的端口）'
+      : '勾选需要关联的端口';
+  }
 }
 
 function buildServiceChecklist() {
@@ -953,6 +972,7 @@ function buildServiceChecklist() {
     });
     ruleServices.appendChild(row);
   }
+  refreshChecklistMode();
 }
 
 function openRuleModal(rule) {
@@ -1004,7 +1024,7 @@ document.getElementById('ruleStateGroup').addEventListener('click', (e) => {
 document.getElementById('ruleScopeGroup').addEventListener('click', (e) => {
   const b = e.target.closest('.seg'); if (!b) return;
   draft.scope = b.dataset.scope; setSeg('ruleScopeGroup', 'scope', draft.scope);
-  ruleServices.hidden = draft.scope !== 'selected';
+  refreshChecklistMode();
 });
 document.getElementById('durPresets').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
