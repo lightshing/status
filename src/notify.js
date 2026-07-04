@@ -1,5 +1,9 @@
 // Alert engine. Evaluates user-defined rules against live state and dispatches
-// messages to the configured channels (Telegram now; SMTP reserved).
+// messages to the configured channels (Telegram + SMTP email).
+//
+// Each alert is emitted as a structured event: { text, mail } where `text` is
+// the Telegram-flavored HTML string and `mail` is a semantic object the email
+// renderer turns into a styled message. dispatch() fans it out per channel.
 //
 // Three rule types:
 //   status_change — a service's up/down state flips on a poll (10s granularity).
@@ -60,7 +64,21 @@ export function createNotifier({ getServices, getIgnores, getRules, dispatch }) 
         if (!ruleCovers(rule, svc)) continue;
         const want = rule.direction || 'both';
         if (want !== 'both' && want !== dir) continue;
-        dispatch(rule.channels, `⚠️ <b>${svc.name}</b> <code>:${svc.port}</code> ${label}`);
+        dispatch(rule.channels, {
+          text: `⚠️ <b>${escHtml(svc.name)}</b> <code>:${svc.port}</code> ${label}`,
+          mail: {
+            accent: dir, // 'up' | 'down'
+            emoji: cur === 1 ? '🟢' : '🔴',
+            title: cur === 1 ? '端口恢复在线' : '端口变为离线',
+            subject: `${cur === 1 ? '🟢 恢复在线' : '🔴 变为离线'} · ${svc.name}:${svc.port}`,
+            summary: cur === 1 ? '该服务已重新可访问。' : '该服务当前无法访问，请及时排查。',
+            rows: [
+              ['服务', svc.name],
+              ['端口', ':' + svc.port],
+              ['当前状态', cur === 1 ? '在线 🟢' : '离线 🔴'],
+            ],
+          },
+        });
       }
     }
 
@@ -80,10 +98,23 @@ export function createNotifier({ getServices, getIgnores, getRules, dispatch }) 
         durationFired.set(key, svc.statusSince);
         const word = wantStatus === 1 ? '持续在线' : '持续离线';
         const emoji = wantStatus === 1 ? '🟢' : '🔴';
-        dispatch(
-          rule.channels,
-          `⏱ ${emoji} <b>${svc.name}</b> <code>:${svc.port}</code> 已${word} ${fmtDur(elapsed / 1000)}（阈值 ${fmtDur(rule.seconds)}）`
-        );
+        const elapsedTxt = fmtDur(elapsed / 1000);
+        dispatch(rule.channels, {
+          text: `⏱ ${emoji} <b>${escHtml(svc.name)}</b> <code>:${svc.port}</code> 已${word} ${elapsedTxt}（阈值 ${fmtDur(rule.seconds)}）`,
+          mail: {
+            accent: wantStatus === 1 ? 'up' : 'down',
+            emoji,
+            title: wantStatus === 1 ? '端口持续在线' : '端口持续离线',
+            subject: `${emoji} ${word} ${elapsedTxt} · ${svc.name}:${svc.port}`,
+            summary: `该服务已${word}超过设定阈值。`,
+            rows: [
+              ['服务', svc.name],
+              ['端口', ':' + svc.port],
+              [word, elapsedTxt],
+              ['触发阈值', fmtDur(rule.seconds)],
+            ],
+          },
+        });
       }
     }
   }
@@ -114,10 +145,21 @@ export function createNotifier({ getServices, getIgnores, getRules, dispatch }) 
         if (knownPorts.has(p.port)) continue;
         const name = p.suggestedName || p.process || '未知进程';
         const cmd = p.command && p.command !== name ? `\n<code>${escHtml(p.command)}</code>` : '';
-        dispatch(
-          rules.flatMap((r) => r.channels),
-          `🆕 发现新占用端口 <code>:${p.port}</code>（${escHtml(name)}）\n既未注册也未忽略。${cmd}`
-        );
+        dispatch(rules.flatMap((r) => r.channels), {
+          text: `🆕 发现新占用端口 <code>:${p.port}</code>（${escHtml(name)}）\n既未注册也未忽略。${cmd}`,
+          mail: {
+            accent: 'info',
+            emoji: '🆕',
+            title: '发现新占用端口',
+            subject: `🆕 新占用端口 :${p.port}（${name}）`,
+            summary: '端口速查扫描到一个既未注册、也未被忽略的新监听端口。',
+            rows: [
+              ['端口', ':' + p.port],
+              ['进程', name],
+            ],
+            note: p.command && p.command !== name ? p.command : '',
+          },
+        });
       }
     }
     // Advance the baseline regardless of rules, so enabling a rule later doesn't

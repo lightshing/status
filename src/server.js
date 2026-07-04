@@ -20,6 +20,7 @@ import { RANGES, DEFAULT_RANGE } from './ranges.js';
 import { startMonitor, POLL_INTERVAL } from './monitor.js';
 import { listListeningPorts } from './ports.js';
 import { createTelegram } from './telegram.js';
+import { createMailer } from './mailer.js';
 import { createNotifier } from './notify.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -55,12 +56,15 @@ const telegram = createTelegram({
   pollIntervalSec: POLL_INTERVAL,
 });
 
-// Route a rendered alert to every requested channel (deduped). Telegram is
-// live; SMTP is reserved (UI exists, delivery is a follow-up).
-function dispatchNotification(channels, text) {
+const mailer = createMailer({ getConfig: () => settings.smtp });
+
+// Route one alert event to every requested channel (deduped). The event carries
+// both a Telegram-flavored `text` and a semantic `mail` object; each channel
+// renders the shape it needs.
+function dispatchNotification(channels, event) {
   const set = new Set(Array.isArray(channels) ? channels : []);
-  if (set.has('telegram') && settings.telegram.enabled) telegram.notify(text);
-  // if (set.has('smtp') && settings.smtp.enabled) sendMail(text); // TODO
+  if (set.has('telegram') && settings.telegram.enabled) telegram.notify(event.text);
+  if (set.has('smtp') && settings.smtp.enabled) mailer.notify(event.mail);
 }
 
 const notifier = createNotifier({
@@ -468,6 +472,35 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 502, { error: 'Telegram 返回：' + (r?.description || '发送失败') });
     }
 
+    // POST /api/settings/smtp/test — send a test email. Accepts a full config in
+    // the body (host/port/secure/username/password/from/recipients) so it works
+    // before saving; a blank password falls back to the stored one.
+    if (pathName === '/api/settings/smtp/test' && req.method === 'POST') {
+      const raw = await readBody(req);
+      let body;
+      try { body = JSON.parse(raw || '{}'); }
+      catch { return sendJson(res, 400, { error: '无效的 JSON' }); }
+      const s = settings.smtp;
+      const override = {
+        host: (body.host && String(body.host).trim()) || s.host,
+        port: body.port !== undefined && Number.isInteger(Number(body.port)) ? Number(body.port) : s.port,
+        secure: typeof body.secure === 'boolean' ? body.secure : s.secure,
+        username: body.username !== undefined ? String(body.username).trim() : s.username,
+        password: (body.password && String(body.password)) || s.password,
+        from: (body.from && String(body.from).trim()) || s.from,
+        recipients: Array.isArray(body.recipients)
+          ? body.recipients.map((r) => String(r).trim()).filter(Boolean)
+          : s.recipients,
+      };
+      if (!override.host) return sendJson(res, 400, { error: '缺少 SMTP 服务器' });
+      if (!override.from) return sendJson(res, 400, { error: '缺少发件人地址' });
+      if (!override.recipients || !override.recipients.length)
+        return sendJson(res, 400, { error: '缺少收件人' });
+      const r = await mailer.sendTest(override);
+      if (r && r.ok) return sendJson(res, 200, { ok: true });
+      return sendJson(res, 502, { error: '发送失败：' + (r?.description || '未知错误') });
+    }
+
     // GET /api/rules — all alert rules.
     if (pathName === '/api/rules' && req.method === 'GET') {
       return sendJson(res, 200, { rules });
@@ -534,5 +567,8 @@ telegram.start();
 server.listen(PORT, () => {
   console.log(`Port Health Monitor running at http://localhost:${PORT}`);
   console.log(`Polling every ${POLL_INTERVAL}s. ${services.length} service(s) registered.`);
-  console.log(`Alert rules: ${rules.length}. Telegram bot: ${settings.telegram.enabled ? 'on' : 'off'}.`);
+  console.log(
+    `Alert rules: ${rules.length}. Telegram: ${settings.telegram.enabled ? 'on' : 'off'}. ` +
+    `SMTP: ${settings.smtp.enabled ? 'on' : 'off'}.`
+  );
 });

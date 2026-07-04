@@ -750,6 +750,25 @@ body {
 .settings-disabled { opacity: 0.6; }
 .is-soon { position: relative; }
 
+/* inline checkbox row (e.g. SMTP SSL/TLS toggle) */
+.check-inline {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  cursor: pointer;
+}
+.check-inline input {
+  width: 15px;
+  height: 15px;
+  margin: 1px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
 /* ---------- rule list ---------- */
 .rule-list { display: flex; flex-direction: column; gap: 10px; }
 .rule-card {

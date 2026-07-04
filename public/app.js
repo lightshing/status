@@ -686,6 +686,23 @@ const tgTokenHint = document.getElementById('tgTokenHint');
 const tgError = document.getElementById('tgError');
 let tgTokenSet = false;
 
+const smtpEnabled = document.getElementById('smtpEnabled');
+const smtpHost = document.getElementById('smtpHost');
+const smtpPort = document.getElementById('smtpPort');
+const smtpSecure = document.getElementById('smtpSecure');
+const smtpUsername = document.getElementById('smtpUsername');
+const smtpPassword = document.getElementById('smtpPassword');
+const smtpFrom = document.getElementById('smtpFrom');
+const smtpRecipients = document.getElementById('smtpRecipients');
+const smtpError = document.getElementById('smtpError');
+const smtpPasswordHint = document.getElementById('smtpPasswordHint');
+let smtpPasswordSet = false;
+
+// Split a recipient string on commas / whitespace / newlines.
+function parseRecipients(raw) {
+  return String(raw || '').split(/[\s,;]+/).map((s) => s.trim()).filter(Boolean);
+}
+
 async function loadSettings() {
   try {
     const res = await fetch('/api/settings');
@@ -700,6 +717,21 @@ async function loadSettings() {
       ? '已保存 Token · 如需更换请输入新的'
       : '在 Telegram 找 @BotFather 创建机器人获取';
     tgError.textContent = '';
+
+    const sm = settings.smtp || {};
+    smtpEnabled.checked = !!sm.enabled;
+    smtpHost.value = sm.host || '';
+    smtpPort.value = sm.port || 465;
+    smtpSecure.checked = sm.secure !== false;
+    smtpUsername.value = sm.username || '';
+    smtpFrom.value = sm.from || '';
+    smtpRecipients.value = Array.isArray(sm.recipients) ? sm.recipients.join(', ') : '';
+    smtpPassword.value = '';
+    smtpPasswordSet = !!sm.passwordSet;
+    smtpPasswordHint.textContent = smtpPasswordSet
+      ? '已保存密码 · 如需更换请输入新的'
+      : '多数邮箱需使用「授权码 / 应用专用密码」，而非登录密码';
+    smtpError.textContent = '';
   } catch (err) {
     console.error('load settings failed', err);
   }
@@ -766,6 +798,86 @@ async function testTelegram() {
 
 document.getElementById('tgSaveBtn').addEventListener('click', saveSettings);
 document.getElementById('tgTestBtn').addEventListener('click', testTelegram);
+
+// ---- settings: SMTP email ---------------------------------------------------
+// Collect the SMTP fields into an API patch. Password is only sent when the
+// user typed a new one (blank keeps the stored secret).
+function collectSmtp() {
+  const from = smtpFrom.value.trim() || smtpUsername.value.trim();
+  const smtp = {
+    enabled: smtpEnabled.checked,
+    host: smtpHost.value.trim(),
+    port: Number(smtpPort.value) || 465,
+    secure: smtpSecure.checked,
+    username: smtpUsername.value.trim(),
+    from,
+    recipients: parseRecipients(smtpRecipients.value),
+  };
+  const pwd = smtpPassword.value;
+  if (pwd) smtp.password = pwd;
+  return smtp;
+}
+
+// Guard the fields required for a working config (only enforced when enabled).
+function smtpMissing(smtp) {
+  if (!smtp.host) return '请先填写 SMTP 服务器';
+  if (!smtp.from) return '请先填写发件人或用户名';
+  if (!smtpPasswordSet && !smtp.password) return '请先填写密码 / 授权码';
+  if (!smtp.recipients.length) return '请至少填写一个收件人';
+  return '';
+}
+
+async function saveSmtp() {
+  smtpError.textContent = '';
+  const smtp = collectSmtp();
+  if (smtp.enabled) {
+    const miss = smtpMissing(smtp);
+    if (miss) { smtpError.textContent = miss; return; }
+  }
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ smtp }),
+    });
+    const json = await res.json();
+    if (!res.ok) { smtpError.textContent = json.error || '保存失败'; return; }
+    await loadSettings();
+    showToast('设置已保存');
+    refreshNotifyBadge();
+  } catch {
+    smtpError.textContent = '网络错误，请重试';
+  }
+}
+
+async function testSmtp() {
+  smtpError.textContent = '';
+  const smtp = collectSmtp();
+  const miss = smtpMissing(smtp);
+  if (miss) { smtpError.textContent = miss; return; }
+  const btn = document.getElementById('smtpTestBtn');
+  btn.disabled = true;
+  const prev = btn.textContent;
+  btn.textContent = '发送中…';
+  try {
+    const res = await fetch('/api/settings/smtp/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(smtp),
+    });
+    const json = await res.json();
+    if (res.ok) showToast('测试邮件已发送 ✓');
+    else smtpError.textContent = json.error || '发送失败';
+  } catch {
+    smtpError.textContent = '网络错误，请重试';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+document.getElementById('smtpSaveBtn').addEventListener('click', saveSmtp);
+document.getElementById('smtpTestBtn').addEventListener('click', testSmtp);
 
 // ---- alert rules ------------------------------------------------------------
 const RULE_META = {

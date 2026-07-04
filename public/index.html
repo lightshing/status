@@ -225,31 +225,56 @@
           </div>
         </section>
 
-        <!-- SMTP (预留) -->
-        <section class="settings-card is-soon">
+        <!-- SMTP 邮件 -->
+        <section class="settings-card">
           <div class="settings-card-head">
             <div class="settings-card-title">
               <span class="channel-ic mail" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
               </span>
               <div>
-                <h3>SMTP 邮件 <span class="soon-badge">即将推出</span></h3>
+                <h3>SMTP 邮件</h3>
                 <p class="settings-card-sub">通过邮箱接收告警，支持多个收件人</p>
               </div>
             </div>
-            <label class="switch" title="即将推出">
-              <input type="checkbox" id="smtpEnabled" disabled />
+            <label class="switch" title="开启 / 关闭">
+              <input type="checkbox" id="smtpEnabled" />
               <span class="switch-slider"></span>
             </label>
           </div>
-          <div class="settings-fields settings-disabled">
+          <div class="settings-fields">
             <div class="field-row">
-              <div class="field"><label>SMTP 服务器</label><input type="text" placeholder="smtp.example.com" disabled /></div>
-              <div class="field field-narrow"><label>端口</label><input type="text" placeholder="465" disabled /></div>
+              <div class="field"><label for="smtpHost">SMTP 服务器</label><input id="smtpHost" type="text" autocomplete="off" placeholder="smtp.example.com" /></div>
+              <div class="field field-narrow"><label for="smtpPort">端口</label><input id="smtpPort" type="number" min="1" max="65535" autocomplete="off" placeholder="465" /></div>
             </div>
-            <div class="field"><label>用户名</label><input type="text" placeholder="you@example.com" disabled /></div>
-            <div class="field"><label>密码 / 授权码</label><input type="password" placeholder="••••••" disabled /></div>
-            <div class="field"><label>收件人（可多个）</label><input type="text" placeholder="a@x.com, b@y.com" disabled /></div>
+            <label class="check-inline">
+              <input type="checkbox" id="smtpSecure" checked />
+              <span>使用 SSL/TLS 加密（推荐，端口 465；587 请取消勾选走 STARTTLS）</span>
+            </label>
+            <div class="field">
+              <label for="smtpUsername">用户名</label>
+              <input id="smtpUsername" type="text" autocomplete="off" placeholder="you@example.com" />
+            </div>
+            <div class="field">
+              <label for="smtpPassword">密码 / 授权码</label>
+              <input id="smtpPassword" type="password" autocomplete="new-password" placeholder="••••••" />
+              <span class="field-hint" id="smtpPasswordHint">多数邮箱需使用「授权码 / 应用专用密码」，而非登录密码</span>
+            </div>
+            <div class="field">
+              <label for="smtpFrom">发件人</label>
+              <input id="smtpFrom" type="text" autocomplete="off" placeholder="alerts@example.com 或 端口监测 &lt;alerts@example.com&gt;" />
+              <span class="field-hint">留空则默认与用户名一致；建议与用户名同域名以免被拦截</span>
+            </div>
+            <div class="field">
+              <label for="smtpRecipients">收件人（可多个）</label>
+              <input id="smtpRecipients" type="text" autocomplete="off" placeholder="a@x.com, b@y.com" />
+              <span class="field-hint">多个地址用逗号、空格或换行分隔</span>
+            </div>
+            <div class="settings-actions">
+              <span class="form-error" id="smtpError"></span>
+              <button type="button" class="btn ghost small" id="smtpTestBtn">发送测试邮件</button>
+              <button type="button" class="btn primary small" id="smtpSaveBtn">保存</button>
+            </div>
           </div>
         </section>
       </div>
@@ -325,9 +350,9 @@
               <input type="checkbox" value="telegram" />
               <span class="channel-opt-body"><span class="dot-tg"></span> Telegram Bot</span>
             </label>
-            <label class="channel-opt is-disabled" title="即将推出">
-              <input type="checkbox" value="smtp" disabled />
-              <span class="channel-opt-body"><span class="dot-mail"></span> SMTP 邮件 <span class="soon-badge">即将推出</span></span>
+            <label class="channel-opt">
+              <input type="checkbox" value="smtp" />
+              <span class="channel-opt-body"><span class="dot-mail"></span> SMTP 邮件</span>
             </label>
           </div>
         </div>
