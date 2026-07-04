@@ -699,6 +699,10 @@ body {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow: hidden;
+  /* In the flex-column drawer body, overflow:hidden makes each card a scroll
+     container whose flex min-height resolves to 0 — without this the cards get
+     squeezed and clipped instead of letting the body scroll. */
+  flex-shrink: 0;
 }
 .settings-card-head {
   display: flex;
