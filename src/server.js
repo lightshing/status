@@ -58,13 +58,16 @@ const telegram = createTelegram({
 
 const mailer = createMailer({ getConfig: () => settings.smtp });
 
-// Route one alert event to every requested channel (deduped). The event carries
-// both a Telegram-flavored `text` and a semantic `mail` object; each channel
-// renders the shape it needs.
-function dispatchNotification(channels, event) {
-  const set = new Set(Array.isArray(channels) ? channels : []);
+// Route one alert event to every requested channel (deduped). The `target`
+// carries the rule's channels plus its own email recipient list; the event
+// carries both a Telegram-flavored `text` and a semantic `mail` object, and
+// each channel renders the shape it needs.
+function dispatchNotification(target, event) {
+  const set = new Set(Array.isArray(target?.channels) ? target.channels : []);
+  const recipients = Array.isArray(target?.recipients) ? target.recipients : [];
   if (set.has('telegram') && settings.telegram.enabled) telegram.notify(event.text);
-  if (set.has('smtp') && settings.smtp.enabled) mailer.notify(event.mail);
+  if (set.has('smtp') && settings.smtp.enabled && recipients.length)
+    mailer.notify(event.mail, recipients);
 }
 
 const notifier = createNotifier({
@@ -216,7 +219,6 @@ function publicSettings(s) {
       secure: s.smtp.secure !== false,
       username: s.smtp.username || '',
       from: s.smtp.from || '',
-      recipients: Array.isArray(s.smtp.recipients) ? s.smtp.recipients : [],
       passwordSet: !!s.smtp.password,
     },
   };
@@ -239,8 +241,6 @@ function applySettingsPatch(current, body) {
   if (typeof sm.secure === 'boolean') next.smtp.secure = sm.secure;
   if (typeof sm.username === 'string') next.smtp.username = sm.username.trim();
   if (typeof sm.from === 'string') next.smtp.from = sm.from.trim();
-  if (Array.isArray(sm.recipients))
-    next.smtp.recipients = sm.recipients.map((r) => String(r).trim()).filter(Boolean);
   if (typeof sm.password === 'string' && sm.password) next.smtp.password = sm.password;
   if (sm.clearPassword === true) next.smtp.password = '';
   return next;
@@ -248,6 +248,28 @@ function applySettingsPatch(current, body) {
 
 const RULE_TYPES = ['status_change', 'duration', 'new_port'];
 const CHANNELS = ['telegram', 'smtp'];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Normalise a rule's per-notification recipient list. Each entry becomes
+// { address, enabled }; blanks / malformed addresses / duplicates are dropped.
+function parseRuleRecipients(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    let address, enabled;
+    if (typeof item === 'string') { address = item; enabled = true; }
+    else if (item && typeof item === 'object') { address = item.address; enabled = item.enabled !== false; }
+    else continue;
+    address = String(address ?? '').trim();
+    if (!EMAIL_RE.test(address)) continue;
+    const key = address.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ address, enabled: !!enabled });
+  }
+  return out;
+}
 
 // Validate + normalise a rule payload against the current service list.
 function validateRule(body) {
@@ -261,7 +283,11 @@ function validateRule(body) {
 
   const enabled = body.enabled !== false;
   const name = String(body.name ?? '').trim();
-  const out = { type, enabled, name, channels };
+  const recipients = parseRuleRecipients(body.recipients);
+  // Email delivery needs a live target: at least one switched-on recipient.
+  if (channels.includes('smtp') && !recipients.some((r) => r.enabled))
+    return { error: '选择「SMTP 邮件」时，请至少添加并启用一个收件人' };
+  const out = { type, enabled, name, channels, recipients };
 
   if (type === 'new_port') return { value: out };
 
@@ -472,9 +498,10 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 502, { error: 'Telegram 返回：' + (r?.description || '发送失败') });
     }
 
-    // POST /api/settings/smtp/test — send a test email. Accepts a full config in
-    // the body (host/port/secure/username/password/from/recipients) so it works
-    // before saving; a blank password falls back to the stored one.
+    // POST /api/settings/smtp/test — send a test email. Accepts the transport
+    // config in the body (host/port/secure/username/password/from) so it works
+    // before saving; a blank password falls back to the stored one. `recipients`
+    // is a transient test-only target (not persisted anywhere).
     if (pathName === '/api/settings/smtp/test' && req.method === 'POST') {
       const raw = await readBody(req);
       let body;
@@ -490,7 +517,7 @@ const server = http.createServer(async (req, res) => {
         from: (body.from && String(body.from).trim()) || s.from,
         recipients: Array.isArray(body.recipients)
           ? body.recipients.map((r) => String(r).trim()).filter(Boolean)
-          : s.recipients,
+          : [],
       };
       if (!override.host) return sendJson(res, 400, { error: '缺少 SMTP 服务器' });
       if (!override.from) return sendJson(res, 400, { error: '缺少发件人地址' });

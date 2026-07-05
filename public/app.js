@@ -693,7 +693,7 @@ const smtpSecure = document.getElementById('smtpSecure');
 const smtpUsername = document.getElementById('smtpUsername');
 const smtpPassword = document.getElementById('smtpPassword');
 const smtpFrom = document.getElementById('smtpFrom');
-const smtpRecipients = document.getElementById('smtpRecipients');
+const smtpTestTo = document.getElementById('smtpTestTo');
 const smtpError = document.getElementById('smtpError');
 const smtpPasswordHint = document.getElementById('smtpPasswordHint');
 let smtpPasswordSet = false;
@@ -725,7 +725,6 @@ async function loadSettings() {
     smtpSecure.checked = sm.secure !== false;
     smtpUsername.value = sm.username || '';
     smtpFrom.value = sm.from || '';
-    smtpRecipients.value = Array.isArray(sm.recipients) ? sm.recipients.join(', ') : '';
     smtpPassword.value = '';
     smtpPasswordSet = !!sm.passwordSet;
     smtpPasswordHint.textContent = smtpPasswordSet
@@ -811,19 +810,17 @@ function collectSmtp() {
     secure: smtpSecure.checked,
     username: smtpUsername.value.trim(),
     from,
-    recipients: parseRecipients(smtpRecipients.value),
   };
   const pwd = smtpPassword.value;
   if (pwd) smtp.password = pwd;
   return smtp;
 }
 
-// Guard the fields required for a working config (only enforced when enabled).
+// Guard the fields required for a working transport (only enforced when enabled).
 function smtpMissing(smtp) {
   if (!smtp.host) return '请先填写 SMTP 服务器';
   if (!smtp.from) return '请先填写发件人或用户名';
   if (!smtpPasswordSet && !smtp.password) return '请先填写密码 / 授权码';
-  if (!smtp.recipients.length) return '请至少填写一个收件人';
   return '';
 }
 
@@ -855,6 +852,9 @@ async function testSmtp() {
   const smtp = collectSmtp();
   const miss = smtpMissing(smtp);
   if (miss) { smtpError.textContent = miss; return; }
+  const testTo = parseRecipients(smtpTestTo.value);
+  if (!testTo.length) { smtpError.textContent = '请先填写测试收件人'; return; }
+  smtp.recipients = testTo; // transient — only this test uses it, never saved
   const btn = document.getElementById('smtpTestBtn');
   btn.disabled = true;
   const prev = btn.textContent;
@@ -939,7 +939,14 @@ function renderRules() {
     const meta = RULE_META[rule.type] || { icon: '•', label: rule.type };
 
     const chips = (rule.channels || [])
-      .map((c) => `<span class="rule-chip ch">${escapeHtml(CHANNEL_LABEL[c] || c)}</span>`)
+      .map((c) => {
+        let label = CHANNEL_LABEL[c] || c;
+        if (c === 'smtp') {
+          const n = (rule.recipients || []).filter((r) => r && r.enabled && r.address).length;
+          label += ` · ${n} 位收件人`;
+        }
+        return `<span class="rule-chip ch">${escapeHtml(label)}</span>`;
+      })
       .join('');
 
     card.innerHTML =
@@ -1010,7 +1017,13 @@ async function deleteRule(rule) {
 
 // The full body a PUT expects (so a toggle re-sends a valid rule).
 function ruleToBody(rule) {
-  const b = { type: rule.type, enabled: rule.enabled, name: rule.name || '', channels: rule.channels || [] };
+  const b = {
+    type: rule.type,
+    enabled: rule.enabled,
+    name: rule.name || '',
+    channels: rule.channels || [],
+    recipients: Array.isArray(rule.recipients) ? rule.recipients : [],
+  };
   if (rule.type !== 'new_port') {
     b.scope = rule.scope;
     b.serviceIds = rule.serviceIds || [];
@@ -1026,7 +1039,7 @@ const ruleForm = document.getElementById('ruleForm');
 const ruleError = document.getElementById('ruleError');
 const ruleServices = document.getElementById('ruleServices');
 let editingRuleId = null;
-const draft = { type: 'status_change', direction: 'both', state: 'down', scope: 'all', seconds: '', serviceIds: new Set() };
+const draft = { type: 'status_change', direction: 'both', state: 'down', scope: 'all', seconds: '', serviceIds: new Set(), recipients: [] };
 
 function setSeg(groupId, attr, value) {
   for (const b of document.getElementById(groupId).querySelectorAll('.seg')) {
@@ -1087,6 +1100,68 @@ function buildServiceChecklist() {
   refreshChecklistMode();
 }
 
+// ---- per-rule email recipients ---------------------------------------------
+const ruleRecipientsField = document.getElementById('ruleRecipientsField');
+const ruleRecipientsList = document.getElementById('ruleRecipients');
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Trim, drop blanks, de-dupe (case-insensitive) the draft's recipient rows.
+function collectRuleRecipients() {
+  const seen = new Set();
+  const out = [];
+  for (const r of draft.recipients) {
+    const address = String(r.address || '').trim();
+    if (!address) continue;
+    const key = address.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ address, enabled: r.enabled !== false });
+  }
+  return out;
+}
+
+function ruleSmtpChecked() {
+  const box = document.querySelector('#ruleChannels input[value="smtp"]');
+  return !!(box && box.checked);
+}
+
+// Recipient rows only matter for the SMTP channel; reveal them when it's on.
+function applyRecipientVisibility() {
+  const on = ruleSmtpChecked();
+  ruleRecipientsField.hidden = !on;
+  if (on && !draft.recipients.length) draft.recipients.push({ address: '', enabled: true });
+  if (on) renderRuleRecipients();
+}
+
+function renderRuleRecipients() {
+  ruleRecipientsList.innerHTML = '';
+  draft.recipients.forEach((rcpt, i) => {
+    const row = document.createElement('div');
+    row.className = 'rcpt-row';
+    row.innerHTML =
+      `<label class="switch" title="开启 / 关闭"><input type="checkbox" ${rcpt.enabled ? 'checked' : ''}><span class="switch-slider"></span></label>` +
+      `<input class="rcpt-input" type="email" autocomplete="off" placeholder="you@example.com" value="${escapeHtml(rcpt.address)}">` +
+      `<button type="button" class="rcpt-del" title="移除">✕</button>`;
+    row.querySelector('.switch input').addEventListener('change', (e) => {
+      draft.recipients[i].enabled = e.target.checked;
+    });
+    row.querySelector('.rcpt-input').addEventListener('input', (e) => {
+      draft.recipients[i].address = e.target.value;
+    });
+    row.querySelector('.rcpt-del').addEventListener('click', () => {
+      draft.recipients.splice(i, 1);
+      renderRuleRecipients();
+    });
+    ruleRecipientsList.appendChild(row);
+  });
+}
+
+document.getElementById('ruleRecipientAdd').addEventListener('click', () => {
+  draft.recipients.push({ address: '', enabled: true });
+  renderRuleRecipients();
+});
+document.getElementById('ruleChannels').addEventListener('change', applyRecipientVisibility);
+
 function openRuleModal(rule) {
   editingRuleId = rule ? rule.id : null;
   ruleError.textContent = '';
@@ -1098,6 +1173,8 @@ function openRuleModal(rule) {
   draft.scope = rule && rule.scope ? rule.scope : 'all';
   draft.seconds = rule && rule.seconds ? rule.seconds : '';
   draft.serviceIds = new Set(rule && rule.serviceIds ? rule.serviceIds : []);
+  draft.recipients = (rule && Array.isArray(rule.recipients) ? rule.recipients : [])
+    .map((r) => ({ address: String(r.address || ''), enabled: r.enabled !== false }));
 
   setSeg('ruleTypeGroup', 'type', draft.type);
   setSeg('ruleDirGroup', 'dir', draft.direction);
@@ -1112,6 +1189,7 @@ function openRuleModal(rule) {
 
   buildServiceChecklist();
   applyRuleVisibility();
+  applyRecipientVisibility();
   ruleModal.hidden = false;
 }
 
@@ -1152,7 +1230,16 @@ ruleForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   ruleError.textContent = '';
   const channels = [...document.getElementById('ruleChannels').querySelectorAll('input:checked')].map((c) => c.value);
-  const body = { type: draft.type, enabled: true, name: '', channels };
+  const recipients = collectRuleRecipients();
+  if (channels.includes('smtp')) {
+    const bad = recipients.find((r) => !EMAIL_RE.test(r.address));
+    if (bad) { ruleError.textContent = `收件人「${bad.address}」不是有效的邮箱地址`; return; }
+    if (!recipients.some((r) => r.enabled)) {
+      ruleError.textContent = '选择「SMTP 邮件」时，请至少添加并启用一个收件人';
+      return;
+    }
+  }
+  const body = { type: draft.type, enabled: true, name: '', channels, recipients };
   if (draft.type !== 'new_port') {
     body.scope = draft.scope;
     body.serviceIds = [...draft.serviceIds];

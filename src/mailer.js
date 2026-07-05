@@ -311,15 +311,19 @@ export function renderAlertEmail(mail) {
 // ============================================================================
 //  Public factory
 // ============================================================================
-// getConfig() -> { enabled, host, port, secure, username, password, from, recipients }
+// getConfig() -> { enabled, host, port, secure, username, password, from }
+// Recipients are supplied per-send (opts.to / opts.override.recipients), never
+// read from the transport config — each alert rule owns its own recipient list.
 export function createMailer({ getConfig }) {
-  // Low-level send with optional config override (used by the pre-save test).
+  // Low-level send. Recipients come from opts.to, falling back to an override's
+  // recipients (used by the pre-save test); the transport config carries none.
   async function sendRaw({ subject, html, text }, opts = {}) {
     const cfg = { ...getConfig(), ...(opts.override || {}) };
     if (!cfg.enabled && !opts.force) return { ok: false, description: '未启用' };
     if (!cfg.host) return { ok: false, description: '缺少 SMTP 服务器' };
     if (!cfg.from) return { ok: false, description: '缺少发件人地址' };
-    const to = (Array.isArray(cfg.recipients) ? cfg.recipients : [])
+    const source = opts.to != null ? opts.to : cfg.recipients;
+    const to = (Array.isArray(source) ? source : [])
       .map((r) => String(r).trim())
       .filter(Boolean);
     if (!to.length) return { ok: false, description: '缺少收件人' };
@@ -329,10 +333,13 @@ export function createMailer({ getConfig }) {
     return smtpSend(cfg, { to, raw });
   }
 
-  // Render + deliver an alert event. Fire-and-forget wrapper for the dispatcher.
-  function notify(mail) {
+  // Render + deliver an alert event to the rule's recipients. Fire-and-forget
+  // wrapper for the dispatcher.
+  function notify(mail, recipients) {
     const { subject, html, text } = renderAlertEmail(mail);
-    sendRaw({ subject, html, text }).catch((e) => console.error('[mailer] send error:', e.message));
+    sendRaw({ subject, html, text }, { to: recipients }).catch((e) =>
+      console.error('[mailer] send error:', e.message)
+    );
   }
 
   // Send a rendered test email, honoring not-yet-saved overrides.

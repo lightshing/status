@@ -34,6 +34,15 @@ export function createNotifier({ getServices, getIgnores, getRules, dispatch }) 
     return Array.isArray(rule.serviceIds) && rule.serviceIds.includes(svc.id);
   }
 
+  // Enabled email recipients declared on a rule. Each entry is { address,
+  // enabled }; only the switched-on ones receive the alert.
+  function mailRecipients(rule) {
+    return (Array.isArray(rule.recipients) ? rule.recipients : [])
+      .filter((r) => r && r.enabled && r.address)
+      .map((r) => String(r.address).trim())
+      .filter(Boolean);
+  }
+
   function fmtDur(sec) {
     let s = Math.max(0, Math.floor(sec));
     const d = Math.floor(s / 86400); s -= d * 86400;
@@ -64,7 +73,7 @@ export function createNotifier({ getServices, getIgnores, getRules, dispatch }) 
         if (!ruleCovers(rule, svc)) continue;
         const want = rule.direction || 'both';
         if (want !== 'both' && want !== dir) continue;
-        dispatch(rule.channels, {
+        dispatch({ channels: rule.channels, recipients: mailRecipients(rule) }, {
           text: `⚠️ <b>${escHtml(svc.name)}</b> <code>:${svc.port}</code> ${label}`,
           mail: {
             accent: dir, // 'up' | 'down'
@@ -99,7 +108,7 @@ export function createNotifier({ getServices, getIgnores, getRules, dispatch }) 
         const word = wantStatus === 1 ? '持续在线' : '持续离线';
         const emoji = wantStatus === 1 ? '🟢' : '🔴';
         const elapsedTxt = fmtDur(elapsed / 1000);
-        dispatch(rule.channels, {
+        dispatch({ channels: rule.channels, recipients: mailRecipients(rule) }, {
           text: `⏱ ${emoji} <b>${escHtml(svc.name)}</b> <code>:${svc.port}</code> 已${word} ${elapsedTxt}（阈值 ${fmtDur(rule.seconds)}）`,
           mail: {
             accent: wantStatus === 1 ? 'up' : 'down',
@@ -145,7 +154,10 @@ export function createNotifier({ getServices, getIgnores, getRules, dispatch }) 
         if (knownPorts.has(p.port)) continue;
         const name = p.suggestedName || p.process || '未知进程';
         const cmd = p.command && p.command !== name ? `\n<code>${escHtml(p.command)}</code>` : '';
-        dispatch(rules.flatMap((r) => r.channels), {
+        // One event, many rules: union their channels and email recipients.
+        const channels = [...new Set(rules.flatMap((r) => r.channels))];
+        const recipients = [...new Set(rules.flatMap(mailRecipients))];
+        dispatch({ channels, recipients }, {
           text: `🆕 发现新占用端口 <code>:${p.port}</code>（${escHtml(name)}）\n既未注册也未忽略。${cmd}`,
           mail: {
             accent: 'info',

@@ -92,7 +92,9 @@ export function saveIgnores(ignores) {
 // ---- Notification settings (channels) --------------------------------------
 // Delivery-channel configuration lives in data/settings.json:
 //   { telegram: { enabled, token, chatId },
-//     smtp:     { enabled, host, port, secure, username, password, from, recipients:[] } }
+//     smtp:     { enabled, host, port, secure, username, password, from } }
+// Recipients are NOT global — each alert rule carries its own recipient list
+// (see data/rules.json), so the SMTP block here is purely the transport.
 // The token / password are secrets — the HTTP layer never echoes them back to
 // the browser, only a boolean "set" flag.
 const DEFAULT_SETTINGS = {
@@ -105,7 +107,6 @@ const DEFAULT_SETTINGS = {
     username: '',
     password: '',
     from: '',
-    recipients: [],
   },
 };
 
@@ -114,9 +115,11 @@ export function loadSettings() {
   try {
     const raw = fs.readFileSync(SETTINGS_FILE, 'utf8');
     const parsed = JSON.parse(raw);
+    const smtp = { ...DEFAULT_SETTINGS.smtp, ...(parsed.smtp || {}) };
+    delete smtp.recipients; // migrated to per-rule recipients; never carry it forward
     return {
       telegram: { ...DEFAULT_SETTINGS.telegram, ...(parsed.telegram || {}) },
-      smtp: { ...DEFAULT_SETTINGS.smtp, ...(parsed.smtp || {}) },
+      smtp,
     };
   } catch {
     return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));

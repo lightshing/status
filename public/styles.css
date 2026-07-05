@@ -949,6 +949,52 @@ body {
 .dot-mail { background: var(--faint); }
 .rule-when[hidden], .rule-scope[hidden] { display: none; }
 
+/* per-rule email recipients */
+.rule-recipients[hidden] { display: none; }
+.rcpt-list { display: flex; flex-direction: column; gap: 7px; }
+.rcpt-row { display: flex; align-items: center; gap: 9px; }
+.rcpt-row .switch { width: 34px; height: 20px; }
+.rcpt-row .switch-slider::before { width: 14px; height: 14px; }
+.rcpt-row .switch input:checked + .switch-slider::before { transform: translateX(14px); }
+.rcpt-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: #fbfbfc;
+  font-size: 13px;
+  color: var(--text);
+}
+.rcpt-input:focus { outline: none; border-color: #b9bfca; box-shadow: 0 0 0 3px rgba(24,24,27,0.06); background: #fff; }
+.rcpt-del {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.rcpt-del:hover { background: rgba(239,68,68,0.1); color: var(--down); }
+.rcpt-add {
+  margin-top: 9px;
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.rcpt-add:hover { border-color: #b9bfca; color: var(--text); }
+
 @media (max-width: 560px) {
   .modal-form { grid-template-columns: 1fr; }
   .container { padding: 16px; }
