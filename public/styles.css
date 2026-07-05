@@ -396,9 +396,14 @@ body {
   box-shadow: 0 16px 48px rgba(16, 24, 40, 0.2);
   width: 100%;
   max-width: 560px;
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   animation: pop 0.14s ease;
 }
+.modal-head { flex-shrink: 0; }
+.modal-form { overflow-y: auto; min-height: 0; }
 @keyframes pop { from { transform: scale(0.97); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -411,7 +416,14 @@ body {
   display: grid; grid-template-columns: 1fr 1fr; gap: 18px 20px;
   padding: 22px;
 }
-.modal-form .form-actions { margin-top: 4px; }
+.modal-form .form-actions {
+  position: sticky;
+  bottom: -22px;
+  margin: 4px -22px -22px;
+  padding: 14px 22px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
 
 /* register/edit + ignore forms stack above the ports lookup */
 #formModal, #ignoreModal { z-index: 210; }
@@ -826,7 +838,7 @@ body {
 /* ---------- rule editor modal ---------- */
 .rule-modal { max-width: 500px; z-index: 320; }
 #ruleModal { z-index: 300; }
-.rule-form { display: flex; flex-direction: column; gap: 16px; padding: 20px 22px; }
+.rule-form { display: flex; flex-direction: column; gap: 16px; padding: 22px; }
 .rule-form .field { gap: 7px; }
 .rule-form .field > label { font-size: 12px; color: var(--muted); font-weight: 500; }
 
