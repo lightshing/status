@@ -24,6 +24,7 @@ const SERVICES_FILE = path.join(DATA_DIR, 'services.json');
 const IGNORES_FILE = path.join(DATA_DIR, 'ignores.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const RULES_FILE = path.join(DATA_DIR, 'rules.json');
+const BACKUP_FILE = path.join(DATA_DIR, 'backup.json');
 
 const RECORD_SIZE = 5;
 
@@ -151,6 +152,26 @@ export function saveRules(rules) {
   const tmp = RULES_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify({ rules }, null, 2));
   fs.renameSync(tmp, RULES_FILE);
+}
+
+// ---- Backup monitor marker -------------------------------------------------
+// data/backup.json: { lastKey } — identity of the last backup run we've already
+// pushed a Telegram notification for, so a restart doesn't re-announce it.
+export function loadBackupState() {
+  ensureDirs();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(BACKUP_FILE, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveBackupState(stateObj) {
+  ensureDirs();
+  const tmp = BACKUP_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(stateObj, null, 2));
+  fs.renameSync(tmp, BACKUP_FILE);
 }
 
 function checkFile(id) {

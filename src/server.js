@@ -22,6 +22,7 @@ import { listListeningPorts } from './ports.js';
 import { createTelegram } from './telegram.js';
 import { createMailer } from './mailer.js';
 import { createNotifier } from './notify.js';
+import { createBackupMonitor } from './backup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -75,6 +76,13 @@ const notifier = createNotifier({
   getIgnores: () => ignores,
   getRules: () => rules,
   dispatch: dispatchNotification,
+});
+
+// Server-backup monitor: polls the backup project's status API and pushes a
+// Telegram message whenever a new backup run appears. It always routes through
+// Telegram (independent of the per-service alert rules above).
+const backup = createBackupMonitor({
+  notify: (text) => telegram.notify(text),
 });
 
 // ---- Aggregation -----------------------------------------------------------
@@ -343,6 +351,11 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, payload);
     }
 
+    // GET /api/backup — latest snapshot of the server-backup status API.
+    if (pathName === '/api/backup' && req.method === 'GET') {
+      return sendJson(res, 200, { backup: backup.snapshot() });
+    }
+
     // GET /api/ports — every TCP port currently listened on, with the process
     // occupying it and whether it's registered here.
     if (pathName === '/api/ports' && req.method === 'GET') {
@@ -590,6 +603,7 @@ const server = http.createServer(async (req, res) => {
 startMonitor(() => services, persist, (svcs) => notifier.onPoll(svcs));
 notifier.start();
 telegram.start();
+backup.start();
 
 server.listen(PORT, () => {
   console.log(`Port Health Monitor running at http://localhost:${PORT}`);

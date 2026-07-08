@@ -328,6 +328,76 @@ body {
 .card-meta .since { margin-left: auto; padding-left: 12px; }
 .card-meta .since.na { color: var(--faint); }
 
+/* ---------- server-backup card ---------- */
+/* Mount sits above the service list; only takes vertical space when populated. */
+.backup-mount { display: block; }
+.backup-mount:empty { display: none; }
+.backup-mount:not(:empty) { margin-bottom: 14px; }
+
+/* Remote-repo badge is wider/lowercase than a port badge — let it breathe. */
+.backup-card .port-badge.remote {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* health chip mirrors the dot palette */
+.health-pill {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 2px 11px;
+  line-height: 1.6;
+}
+.health-pill.up { color: #15803d; background: var(--up-soft); }
+.health-pill.down { color: #b91c1c; background: var(--down-soft); }
+.health-pill.unknown,
+.health-pill.na { color: var(--muted); background: #eef0f3; }
+
+/* row of circles — one per backup run, in place of the history bar */
+.dots {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 12px;
+  min-height: 22px;
+}
+.backup-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+  background: var(--unknown);
+  box-shadow: inset 0 0 0 1px rgba(16, 24, 40, 0.06);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.backup-dot.up { background: var(--up); }
+.backup-dot.down { background: var(--down); }
+.backup-dot:hover {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.1);
+}
+.dots.no-data { min-height: 22px; }
+.dots-empty { font-size: 12.5px; color: var(--faint); }
+
+/* backup meta reuses the service-card meta row; next-run sits at the far right */
+.backup-card .card-meta { color: var(--muted); }
+.backup-card .bk-next { margin-left: auto; padding-left: 12px; white-space: nowrap; }
+.bk-badge { font-weight: 600; }
+.bk-badge.ok { color: var(--up); }
+.bk-badge.bad { color: var(--down); }
+
+/* monospace snapshot id inside the circle tooltip */
+.tooltip .tt-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #cbd2e0;
+  margin-top: 2px;
+}
+
 .empty {
   text-align: center;
   color: var(--faint);

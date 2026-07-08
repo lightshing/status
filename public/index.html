@@ -38,6 +38,7 @@
   </header>
 
   <main class="container">
+    <section id="backupCard" class="backup-mount"></section>
     <section id="serviceList" class="service-list"></section>
     <p class="empty" id="emptyHint" hidden>还没有注册任何服务，点击左上角「注册服务」开始监测。</p>
   </main>
@@ -71,6 +72,26 @@
         </button>
         <a class="url" target="_blank" rel="noopener" hidden></a>
         <span class="since" title="从当前状态开始持续的时长"></span>
+      </div>
+    </article>
+  </template>
+
+  <template id="backupTpl">
+    <article class="card backup-card">
+      <div class="card-head">
+        <div class="card-title">
+          <span class="dot"></span>
+          <span class="name">服务器备份</span>
+          <span class="port-badge remote" hidden></span>
+        </div>
+        <div class="card-actions">
+          <span class="health-pill"></span>
+        </div>
+      </div>
+      <div class="dots" role="list" aria-label="备份历史"></div>
+      <div class="card-meta">
+        <span class="bk-last"></span>
+        <span class="bk-next"></span>
       </div>
     </article>
   </template>

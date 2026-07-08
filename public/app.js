@@ -24,6 +24,8 @@ const els = {
   footMeta: document.getElementById('footMeta'),
   tooltip: document.getElementById('tooltip'),
   cardTpl: document.getElementById('cardTpl'),
+  backupCard: document.getElementById('backupCard'),
+  backupTpl: document.getElementById('backupTpl'),
 };
 
 // ---- range switch ----------------------------------------------------------
@@ -204,6 +206,176 @@ function renderCard(svc) {
   return node;
 }
 
+// ============================================================================
+//  服务器备份卡片 (backup status card)
+// ============================================================================
+// A single card pinned above the service list. Mirrors the service-card look,
+// but the history bar is replaced by a row of circles — one per backup run,
+// each hoverable for that run's details. Data comes from /api/backup, which the
+// server keeps fresh by polling the backup project's status API.
+
+function fmtBytes(n) {
+  if (n == null || isNaN(n)) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let v = Number(n), i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  const val = i === 0 ? String(v) : v.toFixed(v < 10 ? 2 : 1);
+  return `${val} ${units[i]}`;
+}
+
+// Compact date-time in the viewer's local zone (matches the history-bar tooltip
+// style), e.g. "07-08 21:00".
+function bkTime(iso, withSec) {
+  if (!iso) return '未知';
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return String(iso);
+  const pad = (x) => String(x).padStart(2, '0');
+  const base = `${pad(dt.getMonth() + 1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  return withSec ? `${base}:${pad(dt.getSeconds())}` : base;
+}
+
+function bkDur(sec) {
+  let s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60); s -= m * 60;
+  const parts = [];
+  if (h) parts.push(h + ' 时');
+  if (m || h) parts.push(m + ' 分');
+  parts.push(s + ' 秒');
+  return parts.join(' ');
+}
+
+// Coarse "约 X 后" to a future ISO time (up to two units, no seconds).
+function bkRelFromNow(iso) {
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return '';
+  let diff = Math.floor((dt.getTime() - Date.now()) / 1000);
+  if (diff <= 0) return '即将开始';
+  const day = Math.floor(diff / 86400); diff -= day * 86400;
+  const h = Math.floor(diff / 3600); diff -= h * 3600;
+  const m = Math.floor(diff / 60);
+  const parts = [];
+  if (day) parts.push(day + ' 天');
+  if (h) parts.push(h + ' 小时');
+  if (!day && m) parts.push(m + ' 分钟');
+  if (!parts.length) parts.push('不到 1 分钟');
+  return '约 ' + parts.slice(0, 2).join(' ') + '后';
+}
+
+const BK_HEALTH = {
+  healthy: { cls: 'up', label: '健康' },
+  unhealthy: { cls: 'down', label: '异常' },
+  unknown: { cls: 'unknown', label: '未知' },
+};
+
+async function fetchBackup() {
+  try {
+    const res = await fetch('/api/backup');
+    if (!res.ok) throw new Error('bad response');
+    const json = await res.json();
+    renderBackup(json.backup || null);
+  } catch (err) {
+    console.error('backup fetch failed', err);
+    renderBackup(null);
+  }
+}
+
+function renderBackup(bk) {
+  els.backupCard.innerHTML = '';
+  const node = els.backupTpl.content.firstElementChild.cloneNode(true);
+
+  const dot = node.querySelector('.dot');
+  const pill = node.querySelector('.health-pill');
+  const badge = node.querySelector('.port-badge');
+  const dots = node.querySelector('.dots');
+  const last = node.querySelector('.bk-last');
+  const next = node.querySelector('.bk-next');
+
+  // Unreachable → the whole card reads as offline.
+  if (!bk || !bk.reachable) {
+    dot.classList.add('unknown');
+    pill.className = 'health-pill na';
+    pill.textContent = '未连接';
+    last.textContent = '无法连接到备份服务';
+    els.backupCard.appendChild(node);
+    return;
+  }
+
+  // Health chip + status dot.
+  const h = BK_HEALTH[(bk.health && bk.health.status) || 'unknown'] || BK_HEALTH.unknown;
+  dot.classList.add(h.cls);
+  pill.className = 'health-pill ' + h.cls;
+  pill.textContent = h.label;
+
+  // Remote badge (e.g. gdrive:server-oracle3).
+  const remote = bk.config && bk.config.remote;
+  if (remote) {
+    badge.hidden = false;
+    badge.textContent = remote;
+  }
+
+  // One circle per backup run, oldest → newest (left → right).
+  const runs = Array.isArray(bk.history) ? bk.history : [];
+  if (!runs.length) {
+    dots.classList.add('no-data');
+    const hint = document.createElement('span');
+    hint.className = 'dots-empty';
+    hint.textContent = '暂无备份记录';
+    dots.appendChild(hint);
+  } else {
+    for (const run of runs) {
+      const c = document.createElement('span');
+      const ok = run.status === 'success';
+      c.className = 'backup-dot ' + (ok ? 'up' : 'down');
+      c.setAttribute('role', 'listitem');
+      c.dataset.detail = JSON.stringify(run);
+      dots.appendChild(c);
+    }
+  }
+
+  // Meta: last run summary (left) and next scheduled run (right).
+  const lb = bk.lastBackup;
+  if (lb) {
+    const ok = lb.status === 'success';
+    const size = ok && lb.data_added_bytes != null ? ` · 新增 ${fmtBytes(lb.data_added_bytes)}` : '';
+    last.innerHTML =
+      `最近备份 ${bkTime(lb.start_time)} · ` +
+      `<span class="bk-badge ${ok ? 'ok' : 'bad'}">${ok ? '成功' : '失败'}</span>` +
+      size;
+  } else {
+    last.textContent = '尚未运行过备份';
+  }
+
+  if (bk.nextBackupTime) {
+    const rel = bkRelFromNow(bk.nextBackupTime);
+    next.textContent = `下次备份 ${bkTime(bk.nextBackupTime)}${rel ? `（${rel}）` : ''}`;
+  }
+
+  els.backupCard.appendChild(node);
+}
+
+// Tooltip body for one backup circle, built from its stashed run detail.
+function backupTooltipHtml(el) {
+  let d;
+  try { d = JSON.parse(el.dataset.detail || '{}'); } catch { d = {}; }
+  const ok = d.status === 'success';
+  const lines = [`<div class="tt-pct">${ok ? '✅ 备份成功' : '❌ 备份失败'}</div>`];
+  lines.push(`<div>${bkTime(d.start_time, true)}</div>`);
+  if (d.duration_seconds != null) lines.push(`<div>耗时 ${bkDur(d.duration_seconds)}</div>`);
+  if (ok) {
+    if (d.data_added_bytes != null) lines.push(`<div>新增数据 ${fmtBytes(d.data_added_bytes)}</div>`);
+    const fp = [];
+    if (d.files_new != null) fp.push(`新增 ${d.files_new}`);
+    if (d.files_changed != null) fp.push(`变更 ${d.files_changed}`);
+    if (fp.length) lines.push(`<div>文件 ${fp.join(' · ')}</div>`);
+    if (d.snapshot_id) lines.push(`<div class="tt-mono">${escapeHtml(String(d.snapshot_id).slice(0, 12))}</div>`);
+  } else if (d.error) {
+    lines.push(`<div>${escapeHtml(String(d.error).slice(0, 160))}</div>`);
+  }
+  return lines.join('');
+}
+
 // ---- live counters (tick every second) -------------------------------------
 function formatDuration(ms) {
   let s = Math.floor(ms / 1000);
@@ -252,20 +424,25 @@ function fmtTime(sec) {
 
 document.addEventListener('mousemove', (e) => {
   const cell = e.target.closest && e.target.closest('.bar .cell');
-  if (!cell) {
+  const bdot = !cell && e.target.closest && e.target.closest('.backup-dot');
+  if (!cell && !bdot) {
     els.tooltip.hidden = true;
     return;
   }
-  const t = Number(cell.dataset.t);
-  const total = Number(cell.dataset.total);
-  const up = Number(cell.dataset.up);
-  const end = t + state.bucketSec;
   let body;
-  if (total === 0) {
-    body = `<div>${fmtTime(t)} – ${fmtTime(end)}</div><div class="tt-pct">无数据</div>`;
+  if (bdot) {
+    body = backupTooltipHtml(bdot);
   } else {
-    const ratio = ((up / total) * 100).toFixed(1);
-    body = `<div>${fmtTime(t)} – ${fmtTime(end)}</div><div class="tt-pct">在线 ${ratio}% · ${up}/${total} 次</div>`;
+    const t = Number(cell.dataset.t);
+    const total = Number(cell.dataset.total);
+    const up = Number(cell.dataset.up);
+    const end = t + state.bucketSec;
+    if (total === 0) {
+      body = `<div>${fmtTime(t)} – ${fmtTime(end)}</div><div class="tt-pct">无数据</div>`;
+    } else {
+      const ratio = ((up / total) * 100).toFixed(1);
+      body = `<div>${fmtTime(t)} – ${fmtTime(end)}</div><div class="tt-pct">在线 ${ratio}% · ${up}/${total} 次</div>`;
+    }
   }
   els.tooltip.innerHTML = body;
   els.tooltip.hidden = false;
@@ -1280,8 +1457,12 @@ loadRules();
 buildRangeSwitch();
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveRangeThumb);
 fetchData();
+fetchBackup();
 setInterval(() => {
   // never let the periodic refresh rebuild the DOM mid-zoom, or it snaps
   if (performance.now() < zoomEndsAt) return;
   fetchData();
 }, REFRESH_MS);
+// The backup card refreshes on its own cadence — the server only re-polls the
+// backup API every ~minute, so there's nothing finer to show.
+setInterval(fetchBackup, 15000);
