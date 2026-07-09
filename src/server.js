@@ -78,11 +78,31 @@ const notifier = createNotifier({
   dispatch: dispatchNotification,
 });
 
-// Server-backup monitor: polls the backup project's status API and pushes a
-// Telegram message whenever a new backup run appears. It always routes through
-// Telegram (independent of the per-service alert rules above).
+// Enabled email recipients declared on a rule ({ address, enabled }[]).
+function ruleMailRecipients(rule) {
+  return (Array.isArray(rule.recipients) ? rule.recipients : [])
+    .filter((r) => r && r.enabled && r.address)
+    .map((r) => String(r.address).trim())
+    .filter(Boolean);
+}
+
+// Server-backup monitor: polls the backup project's status API and, whenever a
+// new backup run appears, emits an alert event. It's a first-class entry in the
+// notification center — routed through the enabled "backup" rules, honoring
+// each rule's channels, email recipients, and success/failure filter.
 const backup = createBackupMonitor({
-  notify: (text) => telegram.notify(text),
+  emit: (event) => {
+    const applicable = rules.filter((r) => {
+      if (!r || !r.enabled || r.type !== 'backup') return false;
+      const on = r.on || 'both';
+      return on === 'both' || (on === 'success' && event.ok) || (on === 'fail' && !event.ok);
+    });
+    if (!applicable.length) return;
+    // One event, many rules: union their channels and email recipients.
+    const channels = [...new Set(applicable.flatMap((r) => (Array.isArray(r.channels) ? r.channels : [])))];
+    const recipients = [...new Set(applicable.flatMap(ruleMailRecipients))];
+    dispatchNotification({ channels, recipients }, event);
+  },
 });
 
 // ---- Aggregation -----------------------------------------------------------
@@ -254,7 +274,7 @@ function applySettingsPatch(current, body) {
   return next;
 }
 
-const RULE_TYPES = ['status_change', 'duration', 'new_port'];
+const RULE_TYPES = ['status_change', 'duration', 'new_port', 'backup'];
 const CHANNELS = ['telegram', 'smtp'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -298,6 +318,12 @@ function validateRule(body) {
   const out = { type, enabled, name, channels, recipients };
 
   if (type === 'new_port') return { value: out };
+
+  // backup: no port scope; an optional success/failure filter.
+  if (type === 'backup') {
+    out.on = ['both', 'success', 'fail'].includes(body.on) ? body.on : 'both';
+    return { value: out };
+  }
 
   // status_change & duration share scope/serviceIds.
   const scope = body.scope === 'selected' ? 'selected' : 'all';

@@ -96,8 +96,8 @@ function relFromNow(iso) {
   return '约 ' + parts.slice(0, 2).join(' ') + '后';
 }
 
-// A backup run's telegram message.
-function buildMessage(st) {
+// A backup run's Telegram-flavored HTML message.
+function buildText(st) {
   const b = st.lastBackup || {};
   const ok = b.status === 'success';
   const lines = [];
@@ -122,10 +122,52 @@ function buildMessage(st) {
   return lines.join('\n');
 }
 
+// The semantic object the email renderer turns into a styled message
+// (mailer.renderAlertEmail). Mirrors the shape the alert engine emits.
+function buildMail(st) {
+  const b = st.lastBackup || {};
+  const ok = b.status === 'success';
+  const rows = [];
+  rows.push(['开始时间', fmtTime(b.start_time)]);
+  if (b.end_time) rows.push(['结束时间', fmtTime(b.end_time)]);
+  if (b.duration_seconds != null) rows.push(['耗时', fmtDur(b.duration_seconds)]);
+  if (ok) {
+    if (b.data_added_bytes != null) rows.push(['新增数据', fmtBytes(b.data_added_bytes)]);
+    const fp = [];
+    if (b.files_new != null) fp.push(`新增 ${b.files_new}`);
+    if (b.files_changed != null) fp.push(`变更 ${b.files_changed}`);
+    if (fp.length) rows.push(['文件', fp.join(' · ')]);
+    if (b.snapshot_id) rows.push(['快照', String(b.snapshot_id).slice(0, 12)]);
+  }
+  const rel = relFromNow(st.nextBackupTime);
+  rows.push(['下次备份', `${fmtTime(st.nextBackupTime)}${rel ? `（${rel}）` : ''}`]);
+  return {
+    accent: ok ? 'up' : 'down',
+    emoji: ok ? '✅' : '❌',
+    title: ok ? '服务器备份完成' : '服务器备份失败',
+    subject: `${ok ? '✅ 服务器备份完成' : '❌ 服务器备份失败'} · ${fmtTime(b.end_time || b.start_time)}`,
+    summary: ok ? '服务器备份已成功完成。' : '服务器备份未能成功完成，请及时排查。',
+    rows,
+    note: !ok && b.error ? String(b.error).slice(0, 400) : '',
+  };
+}
+
+// One backup run rendered as a channel-agnostic alert event:
+//   { ok, text, mail } — `text` for Telegram, `mail` for the email renderer.
+function buildEvent(st) {
+  return {
+    ok: (st.lastBackup || {}).status === 'success',
+    text: buildText(st),
+    mail: buildMail(st),
+  };
+}
+
 // ---- monitor ---------------------------------------------------------------
-// notify(text)  -> fire-and-forget Telegram send (HTML parse mode).
+// emit(event) -> fire the alert event { ok, text, mail } to whatever the caller
+// wires up (in the app: the notification center, which fans it out to the
+// channels/recipients of the enabled "backup" rules).
 export function createBackupMonitor({
-  notify,
+  emit,
   apiUrl = process.env.BACKUP_API_URL || DEFAULT_URL,
   pollMs = POLL_MS,
 } = {}) {
@@ -185,8 +227,8 @@ export function createBackupMonitor({
         } else if (key !== lastKey) {
           lastKey = key;
           saveBackupState({ lastKey });
-          try { if (notify) notify(buildMessage(latest)); }
-          catch (e) { console.error('[backup] notify error:', e.message); }
+          try { if (emit) emit(buildEvent(latest)); }
+          catch (e) { console.error('[backup] emit error:', e.message); }
         }
       }
     } catch (err) {
@@ -213,5 +255,5 @@ export function createBackupMonitor({
     return latest;
   }
 
-  return { start, stop, snapshot, _buildMessage: buildMessage };
+  return { start, stop, snapshot, _buildEvent: buildEvent };
 }

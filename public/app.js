@@ -1061,11 +1061,13 @@ const RULE_META = {
   status_change: { icon: '⚡', label: '端口状态变更' },
   duration: { icon: '⏱', label: '状态持续时长' },
   new_port: { icon: '🆕', label: '新占用端口' },
+  backup: { icon: '💾', label: '服务器备份' },
 };
 const RULE_TYPE_HINT = {
   status_change: '10 秒探测发现端口变为可用 / 不可用时立即推送。',
   duration: '端口在某状态持续超过设定时长后推送一次。',
   new_port: '端口速查每 20 秒扫描，发现既未注册也未忽略的新占用端口时推送。',
+  backup: '每分钟轮询备份状态，检测到新的备份任务完成时推送本次详情与下次备份时间。',
 };
 
 let rulesCache = [];
@@ -1099,6 +1101,9 @@ function ruleDesc(rule) {
   if (rule.type === 'duration') {
     const st = rule.state === 'up' ? '可用' : '不可用';
     return `${ruleScopeText(rule)} · ${st}持续超过 ${fmtSecs(rule.seconds)}`;
+  }
+  if (rule.type === 'backup') {
+    return { both: '每次备份完成（成功或失败）', success: '仅备份成功时', fail: '仅备份失败时' }[rule.on || 'both'];
   }
   return '发现未注册且未忽略的新占用端口';
 }
@@ -1207,6 +1212,7 @@ function ruleToBody(rule) {
   }
   if (rule.type === 'status_change') b.direction = rule.direction || 'both';
   if (rule.type === 'duration') { b.state = rule.state; b.seconds = rule.seconds; }
+  if (rule.type === 'backup') b.on = rule.on || 'both';
   return b;
 }
 
@@ -1216,7 +1222,7 @@ const ruleForm = document.getElementById('ruleForm');
 const ruleError = document.getElementById('ruleError');
 const ruleServices = document.getElementById('ruleServices');
 let editingRuleId = null;
-const draft = { type: 'status_change', direction: 'both', state: 'down', scope: 'all', seconds: '', serviceIds: new Set(), recipients: [] };
+const draft = { type: 'status_change', direction: 'both', state: 'down', scope: 'all', seconds: '', on: 'both', serviceIds: new Set(), recipients: [] };
 
 function setSeg(groupId, attr, value) {
   for (const b of document.getElementById(groupId).querySelectorAll('.seg')) {
@@ -1349,6 +1355,7 @@ function openRuleModal(rule) {
   draft.state = rule && rule.state ? rule.state : 'down';
   draft.scope = rule && rule.scope ? rule.scope : 'all';
   draft.seconds = rule && rule.seconds ? rule.seconds : '';
+  draft.on = rule && rule.on ? rule.on : 'both';
   draft.serviceIds = new Set(rule && rule.serviceIds ? rule.serviceIds : []);
   draft.recipients = (rule && Array.isArray(rule.recipients) ? rule.recipients : [])
     .map((r) => ({ address: String(r.address || ''), enabled: r.enabled !== false }));
@@ -1356,6 +1363,7 @@ function openRuleModal(rule) {
   setSeg('ruleTypeGroup', 'type', draft.type);
   setSeg('ruleDirGroup', 'dir', draft.direction);
   setSeg('ruleStateGroup', 'state', draft.state);
+  setSeg('ruleBackupOnGroup', 'on', draft.on);
   setSeg('ruleScopeGroup', 'scope', draft.scope);
   document.getElementById('ruleSeconds').value = draft.seconds || '';
 
@@ -1387,6 +1395,10 @@ document.getElementById('ruleDirGroup').addEventListener('click', (e) => {
 document.getElementById('ruleStateGroup').addEventListener('click', (e) => {
   const b = e.target.closest('.seg'); if (!b) return;
   draft.state = b.dataset.state; setSeg('ruleStateGroup', 'state', draft.state);
+});
+document.getElementById('ruleBackupOnGroup').addEventListener('click', (e) => {
+  const b = e.target.closest('.seg'); if (!b) return;
+  draft.on = b.dataset.on; setSeg('ruleBackupOnGroup', 'on', draft.on);
 });
 document.getElementById('ruleScopeGroup').addEventListener('click', (e) => {
   const b = e.target.closest('.seg'); if (!b) return;
@@ -1426,6 +1438,7 @@ ruleForm.addEventListener('submit', async (e) => {
     body.state = draft.state;
     body.seconds = Number(document.getElementById('ruleSeconds').value);
   }
+  if (draft.type === 'backup') body.on = draft.on;
   // keep the enabled flag when editing an existing rule
   if (editingRuleId) {
     const existing = rulesCache.find((r) => r.id === editingRuleId);

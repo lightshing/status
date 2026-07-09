@@ -316,8 +316,19 @@
             <button type="button" class="seg" data-type="status_change">状态变更</button>
             <button type="button" class="seg" data-type="duration">持续时长</button>
             <button type="button" class="seg" data-type="new_port">新占用端口</button>
+            <button type="button" class="seg" data-type="backup">服务器备份</button>
           </div>
           <span class="field-hint" id="ruleTypeHint"></span>
+        </div>
+
+        <!-- 触发条件（仅服务器备份） -->
+        <div class="field rule-when" data-for="backup">
+          <label>触发条件</label>
+          <div class="seg-group" id="ruleBackupOnGroup">
+            <button type="button" class="seg" data-on="both">成功或失败</button>
+            <button type="button" class="seg" data-on="success">仅备份成功</button>
+            <button type="button" class="seg" data-on="fail">仅备份失败</button>
+          </div>
         </div>
 
         <!-- 方向（仅状态变更） -->
